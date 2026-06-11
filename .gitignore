@@ -36,6 +36,9 @@ build/
 cmake-build-*/
 out/
 
+# Cloned reference repos
+third_party/
+
 # IDE files
 .idea/
 .vs/
@@ -54,3 +57,6 @@ CTestTestfile.cmake
 # OS specific files
 .DS_Store
 Thumbs.db
+
+# Python
+__pycache__/

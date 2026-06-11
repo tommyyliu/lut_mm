@@ -1,32 +1,39 @@
-cmake_minimum_required(VERSION 3.30.5)
-project(bnet)
+cmake_minimum_required(VERSION 3.21)
+project(lut_mm CXX)
 
-set(CMAKE_CXX_STANDARD 26)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Add optimization flags
-if(MSVC)
-    # Visual Studio compiler flags
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2 /Ob2 /Oi /Ot /GL /arch:AVX2")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /O2 /Ob1")
-    # Enable parallel compilation
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
-    # Enable link-time optimization
-    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /LTCG")
-else()
-    # GCC/Clang compiler flags
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -march=native -ffast-math")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O2")
-    # Enable link-time optimization
-    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -flto")
-endif()
-
-add_executable(bnet main.cpp
-        lut_mm.cpp
-        lut_mm.h
-        lut_mm_optimized.cpp
-        lut_mm_optimized.h
-        permutations.cpp
-        permutations.h
-        weight_packing.cpp
-        weight_packing.h
+add_executable(bench
+    src/bench_main.cpp
+    src/ternary_mm_ref.cpp
+    src/ternary_mm_avx2.cpp
+    src/ternary_mm_avx512.cpp
+    src/ternary_mm_bitnet.cpp
+    src/ternary_mm_bitnet512.cpp
 )
+
+# Arch flags are per-file so each kernel is compiled exactly for its target
+# ISA (and naive_mm's AVX2 auto-vectorized baseline stays comparable).
+if(MSVC)
+    target_compile_options(bench PRIVATE /W4)
+    set_source_files_properties(src/ternary_mm_ref.cpp src/ternary_mm_avx2.cpp
+        PROPERTIES COMPILE_OPTIONS "/arch:AVX2")
+    set_source_files_properties(src/ternary_mm_avx512.cpp
+        PROPERTIES COMPILE_OPTIONS "/arch:AVX512")
+    # /wd4068: the generated BitNet code uses #pragma unroll
+    set_source_files_properties(src/ternary_mm_bitnet.cpp
+        PROPERTIES COMPILE_OPTIONS "/arch:AVX2;/wd4068")
+    set_source_files_properties(src/ternary_mm_bitnet512.cpp
+        PROPERTIES COMPILE_OPTIONS "/arch:AVX512")
+else()
+    target_compile_options(bench PRIVATE -Wall -Wextra)
+    set_source_files_properties(src/ternary_mm_ref.cpp src/ternary_mm_avx2.cpp
+        PROPERTIES COMPILE_OPTIONS "-mavx2")
+    set_source_files_properties(src/ternary_mm_avx512.cpp
+        PROPERTIES COMPILE_OPTIONS "-mavx512f;-mavx512bw")
+    set_source_files_properties(src/ternary_mm_bitnet.cpp
+        PROPERTIES COMPILE_OPTIONS "-mavx2")
+    set_source_files_properties(src/ternary_mm_bitnet512.cpp
+        PROPERTIES COMPILE_OPTIONS "-mavx512f;-mavx512bw")
+endif()
