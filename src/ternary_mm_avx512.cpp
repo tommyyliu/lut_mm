@@ -1,9 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include <immintrin.h>
 
 #include <cstring>
 #include <vector>
 
-#include "lut_build.h"
 #include "ternary_mm.h"
 
 // AVX-512 (F+BW) kernel exploiting the +/- mirror symmetry of balanced
@@ -211,145 +211,5 @@ void lut_mm_avx512(const int8_t* __restrict A, const int8_t* __restrict P,
     for (; i < M; ++i) {
         lut_rows<1>(A + (size_t)i * K, P, K, N, C + (size_t)i * N,
                     acc16.data(), bc);
-    }
-}
-
-// ---------------------------------------------------------------------------
-// 256-bit control variant (AVX-512VL), used to separate vector width from
-// the 5-trit/122-entry design when comparing against BitNet's 256-bit TL2
-// kernel. Deliberately kept at the original (v1) sweep design so the
-// width-scaling comparison against the TL2@512 port stays matched; see the
-// README's width-vs-design section. The 128 int16 entries span eight ymm
-// registers and a two-register vpermt2w covers only 32 of them, so each
-// 16-lane lookup needs four permutes plus a three-blend select tree on
-// index bits 5-6 — permute table capacity scales with the vector width,
-// which is part of what 512 bits buys this design.
-
-namespace {
-
-// out[idx] = dot(a[0..count), digits(idx)), idx in base 3, digit-1 per
-// trit, a[0] paired with the most significant trit. Writes 3^count
-// entries. (v1 scalar build, used by the 256-bit control.)
-inline void build_half_lut(const int8_t* a, int count, int16_t* out) {
-    out[0] = 0;
-    int len = 1;
-    for (int t = 0; t < count; ++t) {
-        const int16_t av = a[t];
-        for (int s = len - 1; s >= 0; --s) {
-            const int16_t base = out[s];
-            out[3 * s + 0] = (int16_t)(base - av);
-            out[3 * s + 1] = base;
-            out[3 * s + 2] = (int16_t)(base + av);
-        }
-        len *= 3;
-    }
-}
-
-// crow += acc16; acc16 = 0. (v1 flush, used by the 256-bit control.)
-inline void flush_acc(int16_t* acc16, int32_t* crow, int N) {
-    int j = 0;
-    for (; j + 32 <= N; j += 32) {
-        const __m512i a = _mm512_loadu_si512(acc16 + j);
-        const __m512i lo = _mm512_cvtepi16_epi32(_mm512_castsi512_si256(a));
-        const __m512i hi =
-            _mm512_cvtepi16_epi32(_mm512_extracti64x4_epi64(a, 1));
-        _mm512_storeu_si512(
-            crow + j,
-            _mm512_add_epi32(_mm512_loadu_si512(crow + j), lo));
-        _mm512_storeu_si512(
-            crow + j + 16,
-            _mm512_add_epi32(_mm512_loadu_si512(crow + j + 16), hi));
-        _mm512_storeu_si512(acc16 + j, _mm512_setzero_si512());
-    }
-    for (; j < N; ++j) {
-        crow[j] += acc16[j];
-        acc16[j] = 0;
-    }
-}
-
-}  // namespace
-
-void lut_mm_avx512_256(const int8_t* A, const int8_t* P, int M, int K, int N,
-                       int32_t* C) {
-    const int G = K / 5;
-    constexpr int kFlushGroups = 32;  // 32 * 640 = 20480 < 32767
-
-    alignas(64) int16_t idx_h[4][32], idx_l[4][32];
-    for (int k = 0; k < 4; ++k) {
-        for (int t = 0; t < 32; ++t) {
-            const int n = 121 + 32 * k + t;
-            idx_h[k][t] = (int16_t)(n / 9);
-            idx_l[k][t] = (int16_t)(n % 9);
-        }
-    }
-    __m512i vidx_h[4], vidx_l[4];
-    for (int k = 0; k < 4; ++k) {
-        vidx_h[k] = _mm512_loadu_si512(idx_h[k]);
-        vidx_l[k] = _mm512_loadu_si512(idx_l[k]);
-    }
-
-    alignas(64) int16_t h_arr[32] = {0};  // 27 entries used, rest stays 0
-    alignas(64) int16_t l_arr[32] = {0};  // 9 entries used, rest stays 0
-    alignas(64) int16_t tbuf[128];
-    const __m256i zero = _mm256_setzero_si256();
-    const __m256i c32 = _mm256_set1_epi16(32);
-    const __m256i c64 = _mm256_set1_epi16(64);
-
-    std::vector<int16_t> acc16_buf((size_t)N, 0);
-    int16_t* acc16 = acc16_buf.data();
-
-    for (int i = 0; i < M; ++i) {
-        const int8_t* a_row = A + (size_t)i * K;
-        int32_t* crow = C + (size_t)i * N;
-        std::memset(crow, 0, (size_t)N * sizeof(int32_t));
-        for (int g = 0; g < G; ++g) {
-            const int8_t* a = a_row + 5 * g;
-            build_half_lut(a, 3, h_arr);
-            build_half_lut(a + 3, 2, l_arr);
-            const __m512i hv = _mm512_loadu_si512(h_arr);
-            const __m512i lv = _mm512_loadu_si512(l_arr);
-            for (int k = 0; k < 4; ++k) {
-                _mm512_store_si512(
-                    tbuf + 32 * k,
-                    _mm512_add_epi16(
-                        _mm512_permutexvar_epi16(vidx_h[k], hv),
-                        _mm512_permutexvar_epi16(vidx_l[k], lv)));
-            }
-            __m256i T[8];
-            for (int k = 0; k < 8; ++k)
-                T[k] = _mm256_load_si256((const __m256i*)(tbuf + 16 * k));
-
-            const int8_t* pw = P + (size_t)g * N;
-            int j = 0;
-            for (; j + 16 <= N; j += 16) {
-                const __m128i pb =
-                    _mm_loadu_si128((const __m128i*)(pw + j));
-                const __m256i v = _mm256_cvtepi8_epi16(pb);
-                const __mmask16 kneg = _mm256_movepi16_mask(v);
-                const __m256i m = _mm256_abs_epi16(v);
-                const __mmask16 k5 = _mm256_test_epi16_mask(m, c32);
-                const __mmask16 k6 = _mm256_test_epi16_mask(m, c64);
-                const __m256i r0 = _mm256_permutex2var_epi16(T[0], m, T[1]);
-                const __m256i r1 = _mm256_permutex2var_epi16(T[2], m, T[3]);
-                const __m256i r2 = _mm256_permutex2var_epi16(T[4], m, T[5]);
-                const __m256i r3 = _mm256_permutex2var_epi16(T[6], m, T[7]);
-                const __m256i ra = _mm256_mask_blend_epi16(k5, r0, r1);
-                const __m256i rb = _mm256_mask_blend_epi16(k5, r2, r3);
-                __m256i r = _mm256_mask_blend_epi16(k6, ra, rb);
-                r = _mm256_mask_sub_epi16(r, kneg, zero, r);
-                _mm256_storeu_si256(
-                    (__m256i*)(acc16 + j),
-                    _mm256_add_epi16(
-                        _mm256_loadu_si256((const __m256i*)(acc16 + j)), r));
-            }
-            for (; j < N; ++j) {
-                const int v = pw[j];
-                const int n = 121 + (v < 0 ? -v : v);
-                const int16_t val = (int16_t)(h_arr[n / 9] + l_arr[n % 9]);
-                acc16[j] = (int16_t)(acc16[j] + (v < 0 ? -val : val));
-            }
-            if ((g + 1) % kFlushGroups == 0 || g + 1 == G)
-                flush_acc(acc16, crow, N);
-        }
     }
 }

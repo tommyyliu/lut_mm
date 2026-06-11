@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Includes (via src/generated/) kernel code from microsoft/BitNet,
+// MIT License, Copyright (c) Microsoft Corporation.
+//
 // Adapter running microsoft/BitNet's TL2 AVX2 kernels (generated verbatim
 // by tools/gen_bitnet_tl2.py into src/generated/) inside this harness.
 //

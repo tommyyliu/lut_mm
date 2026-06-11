@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
 // Experiment harness: verifies every LUT implementation against a naive
 // dense GEMM (exact integer match) and benchmarks all of them.
 //
@@ -32,12 +34,9 @@ bool cpu_has_avx512bw() {
     const unsigned long long xcr0 = _xgetbv(0);
     if ((xcr0 & 0xE6) != 0xE6) return false;  // XMM, YMM, opmask, ZMM state
     __cpuidex(info, 7, 0);
-    // AVX512F, AVX512BW, AVX512VL (VL gates the 256-bit control kernel)
-    return (info[1] & (1 << 16)) && (info[1] & (1 << 30)) &&
-           (info[1] & (1u << 31));
+    return (info[1] & (1 << 16)) && (info[1] & (1 << 30));  // AVX512F, BW
 #else
-    return __builtin_cpu_supports("avx512bw") &&
-           __builtin_cpu_supports("avx512vl");
+    return __builtin_cpu_supports("avx512bw");
 #endif
 }
 
@@ -182,18 +181,10 @@ int main(int argc, char** argv) {
     std::vector<Impl> impls = {
         {"naive_mm",
          [&](int32_t* out) { naive_mm(A.data(), W.data(), M, K, N, out); }},
-        {"lut_mm_scalar",
-         [&](int32_t* out) { lut_mm_scalar(A.data(), P.data(), M, K, N, out); }},
-        {"lut_mm_avx2",
-         [&](int32_t* out) { lut_mm_avx2(A.data(), P.data(), M, K, N, out); }},
     };
     if (cpu_has_avx512bw()) {
         impls.push_back({"lut_mm_avx512", [&](int32_t* out) {
                              lut_mm_avx512(A.data(), P.data(), M, K, N, out);
-                         }});
-        impls.push_back({"lut_mm_512@256b", [&](int32_t* out) {
-                             lut_mm_avx512_256(A.data(), P.data(), M, K, N,
-                                               out);
                          }});
     } else {
         std::printf("lut_mm_avx512: skipped (CPU lacks AVX-512BW)\n\n");

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Benchmark the NumPy reference implementation (reference/main.py).
 
 Runs the reference basic_mm (@) and lut_mm on random data of the given

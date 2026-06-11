@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Derived from microsoft/BitNet's generated TL2 kernels (MIT License,
+// Copyright (c) Microsoft Corporation); the widening is this project's.
+//
 // A direct 512-bit widening of BitNet's TL2 three-trit sweep, so the
 // "width vs design" comparison has a measured TL2@512 instead of an
 // estimate. The packed weight blob, LUT construction, sign convention and
