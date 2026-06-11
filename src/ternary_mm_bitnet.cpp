@@ -23,6 +23,8 @@
 
 #include <cmath>
 #include <cstring>
+#include <algorithm>
+#include <thread>
 #include <vector>
 
 #include "ternary_mm.h"
@@ -114,4 +116,38 @@ void lut_mm_bitnet_tl2(const float* B, const uint8_t* qw, int M, int K,
             crow[j] = (int32_t)lrintf(f);
         }
     }
+}
+
+void lut_mm_bitnet_tl2_mt(const float* B, const uint8_t* qw, int M, int K,
+                          int N, int32_t* C, int num_threads) {
+    if (num_threads <= 1 || M <= 1) {
+        lut_mm_bitnet_tl2(B, qw, M, K, N, C);
+        return;
+    }
+
+    const int threads = std::min(num_threads, M);
+    std::vector<std::thread> workers;
+    workers.reserve((size_t)threads - 1);
+
+    int start = 0;
+    for (int t = 0; t < threads; ++t) {
+        const int remaining_rows = M - start;
+        const int remaining_threads = threads - t;
+        const int rows = (remaining_rows + remaining_threads - 1) /
+                         remaining_threads;
+        const int row0 = start;
+        start += rows;
+
+        auto run_chunk = [=] {
+            lut_mm_bitnet_tl2(B + (size_t)row0 * K, qw, rows, K, N,
+                              C + (size_t)row0 * N);
+        };
+        if (t + 1 == threads) {
+            run_chunk();
+        } else {
+            workers.emplace_back(run_chunk);
+        }
+    }
+
+    for (auto& worker : workers) worker.join();
 }

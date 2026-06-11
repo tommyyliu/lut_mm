@@ -27,6 +27,8 @@ void naive_mm(const int8_t* A, const int8_t* W, int M, int K, int N,
 // full design.
 void lut_mm_avx512(const int8_t* __restrict A, const int8_t* __restrict P,
                    int M, int K, int N, int32_t* __restrict C);
+void lut_mm_avx512_mt(const int8_t* A, const int8_t* P, int M, int K, int N,
+                      int32_t* C, int num_threads);
 
 // microsoft/BitNet TL2 kernels (AVX2), for comparison. B is the float copy
 // of the activations; qw is the weight blob from tools/pack_tl2.py. Only
@@ -34,6 +36,8 @@ void lut_mm_avx512(const int8_t* __restrict A, const int8_t* __restrict P,
 bool bitnet_tl2_supported(int K, int N);
 void lut_mm_bitnet_tl2(const float* B, const uint8_t* qw, int M, int K,
                        int N, int32_t* C);
+void lut_mm_bitnet_tl2_mt(const float* B, const uint8_t* qw, int M, int K,
+                          int N, int32_t* C, int num_threads);
 
 // Our 512-bit widening of the TL2 three-trit sweep (same packed blob);
 // measured counterpart to the "TL2 scaled to 512 bits" estimate.

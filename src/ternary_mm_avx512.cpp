@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <immintrin.h>
 
+#include <algorithm>
 #include <cstring>
+#include <new>
+#include <thread>
 #include <vector>
 
 #include "ternary_mm.h"
@@ -93,39 +96,55 @@ inline void build_tables(const int8_t* a, const BuildConsts& bc,
 // crow = acc16 (first flush) or crow += acc16; acc16 = 0.
 inline void flush_row(int16_t* acc16, int32_t* crow, int N, bool first) {
     int j = 0;
+    if (first) {
+        for (; j + 32 <= N; j += 32) {
+            const __m512i a = _mm512_loadu_si512(acc16 + j);
+            const __m512i lo =
+                _mm512_cvtepi16_epi32(_mm512_castsi512_si256(a));
+            const __m512i hi =
+                _mm512_cvtepi16_epi32(_mm512_extracti64x4_epi64(a, 1));
+            _mm512_storeu_si512(crow + j, lo);
+            _mm512_storeu_si512(crow + j + 16, hi);
+            _mm512_storeu_si512(acc16 + j, _mm512_setzero_si512());
+        }
+        for (; j < N; ++j) {
+            crow[j] = acc16[j];
+            acc16[j] = 0;
+        }
+        return;
+    }
     for (; j + 32 <= N; j += 32) {
         const __m512i a = _mm512_loadu_si512(acc16 + j);
         __m512i lo = _mm512_cvtepi16_epi32(_mm512_castsi512_si256(a));
         __m512i hi =
             _mm512_cvtepi16_epi32(_mm512_extracti64x4_epi64(a, 1));
-        if (!first) {
-            lo = _mm512_add_epi32(_mm512_loadu_si512(crow + j), lo);
-            hi = _mm512_add_epi32(_mm512_loadu_si512(crow + j + 16), hi);
-        }
+        lo = _mm512_add_epi32(_mm512_loadu_si512(crow + j), lo);
+        hi = _mm512_add_epi32(_mm512_loadu_si512(crow + j + 16), hi);
         _mm512_storeu_si512(crow + j, lo);
         _mm512_storeu_si512(crow + j + 16, hi);
         _mm512_storeu_si512(acc16 + j, _mm512_setzero_si512());
     }
     for (; j < N; ++j) {
-        crow[j] = (first ? 0 : crow[j]) + acc16[j];
+        crow[j] += acc16[j];
         acc16[j] = 0;
     }
 }
 
 // Processes R rows (activation rows a_base + r*K, outputs c_base + r*N).
-// acc16 must hold R*N zeroed int16 and is left zeroed on return.
-template <int R>
+// acc16 must hold R*acc_stride zeroed int16 and is left zeroed on return.
+template <int R, bool HasTail>
 void lut_rows(const int8_t* __restrict a_base, const int8_t* __restrict P,
               int K, int N, int32_t* __restrict c_base,
-              int16_t* __restrict acc16, const BuildConsts& bc) {
+              int16_t* __restrict acc16, int acc_stride,
+              const BuildConsts& bc) {
     const int G = K / 5;
     // int16 partial sums are flushed to int32 before they can overflow:
-    // 48 groups * max |entry| 640 = 30720 < 32767.
-    constexpr int kFlushGroups = 48;
+    // 51 groups * max |entry| 640 = 32640 < 32767.
+    constexpr int kFlushGroups = 51;
     // The last N % 32 columns run the same body under these masks.
-    const int rem = N & 31;
-    const __mmask64 tail_b = rem ? (((uint64_t)1 << rem) - 1) : 0;
-    const __mmask32 tail_w = rem ? (((uint32_t)1 << rem) - 1) : 0;
+    const int rem = HasTail ? (N & 31) : 0;
+    const __mmask64 tail_b = HasTail ? (((uint64_t)1 << rem) - 1) : 0;
+    const __mmask32 tail_w = HasTail ? (((uint32_t)1 << rem) - 1) : 0;
     const __m512i zero = _mm512_setzero_si512();
     const __m512i c64 = _mm512_set1_epi16(64);
 
@@ -150,12 +169,12 @@ void lut_rows(const int8_t* __restrict a_base, const int8_t* __restrict P,
                                                              T[r][3]);
                 __m512i rr = _mm512_mask_blend_epi16(khi, r0, r1);
                 rr = _mm512_mask_sub_epi16(rr, kneg, zero, rr);
-                int16_t* acc = acc16 + (size_t)r * N + j;
+                int16_t* acc = acc16 + (size_t)r * acc_stride + j;
                 _mm512_storeu_si512(
                     acc, _mm512_add_epi16(_mm512_loadu_si512(acc), rr));
             }
         }
-        if (rem) {
+        if constexpr (HasTail) {
             const __m512i pb = _mm512_maskz_loadu_epi8(tail_b, pw + j);
             const __m512i v =
                 _mm512_cvtepi8_epi16(_mm512_castsi512_si256(pb));
@@ -169,7 +188,7 @@ void lut_rows(const int8_t* __restrict a_base, const int8_t* __restrict P,
                                                              T[r][3]);
                 __m512i rr = _mm512_mask_blend_epi16(khi, r0, r1);
                 rr = _mm512_mask_sub_epi16(rr, kneg, zero, rr);
-                int16_t* acc = acc16 + (size_t)r * N + j;
+                int16_t* acc = acc16 + (size_t)r * acc_stride + j;
                 const __m512i cur = _mm512_maskz_loadu_epi16(tail_w, acc);
                 _mm512_mask_storeu_epi16(acc, tail_w,
                                          _mm512_add_epi16(cur, rr));
@@ -177,11 +196,24 @@ void lut_rows(const int8_t* __restrict a_base, const int8_t* __restrict P,
         }
         if (++pending == kFlushGroups || g + 1 == G) {
             for (int r = 0; r < R; ++r)
-                flush_row(acc16 + (size_t)r * N, c_base + (size_t)r * N, N,
-                          first);
+                flush_row(acc16 + (size_t)r * acc_stride,
+                          c_base + (size_t)r * N, N, first);
             first = false;
             pending = 0;
         }
+    }
+}
+
+template <int R>
+void lut_rows_dispatch(const int8_t* __restrict a_base,
+                       const int8_t* __restrict P, int K, int N,
+                       int32_t* __restrict c_base,
+                       int16_t* __restrict acc16, int acc_stride,
+                       const BuildConsts& bc) {
+    if (N & 31) {
+        lut_rows<R, true>(a_base, P, K, N, c_base, acc16, acc_stride, bc);
+    } else {
+        lut_rows<R, false>(a_base, P, K, N, c_base, acc16, acc_stride, bc);
     }
 }
 
@@ -198,18 +230,58 @@ void lut_mm_avx512(const int8_t* __restrict A, const int8_t* __restrict P,
     // Row blocks of 4: measured best on Zen 5 — R=8's 32 table registers
     // spill and give back the decode sharing.
     const BuildConsts& bc = build_consts();
-    std::vector<int16_t> acc16((size_t)(M < 4 ? M : 4) * N, 0);
+    const int acc_stride = (N + 31) & ~31;
+    const int max_rows = M < 4 ? M : 4;
+    int16_t* acc16 = static_cast<int16_t*>(
+        ::operator new[]((size_t)max_rows * acc_stride * sizeof(int16_t),
+                         std::align_val_t(64)));
+    std::memset(acc16, 0, (size_t)max_rows * acc_stride * sizeof(int16_t));
     int i = 0;
     for (; i + 4 <= M; i += 4) {
-        lut_rows<4>(A + (size_t)i * K, P, K, N, C + (size_t)i * N,
-                    acc16.data(), bc);
+        lut_rows_dispatch<4>(A + (size_t)i * K, P, K, N, C + (size_t)i * N,
+                             acc16, acc_stride, bc);
     }
     for (; i + 2 <= M; i += 2) {
-        lut_rows<2>(A + (size_t)i * K, P, K, N, C + (size_t)i * N,
-                    acc16.data(), bc);
+        lut_rows_dispatch<2>(A + (size_t)i * K, P, K, N, C + (size_t)i * N,
+                             acc16, acc_stride, bc);
     }
     for (; i < M; ++i) {
-        lut_rows<1>(A + (size_t)i * K, P, K, N, C + (size_t)i * N,
-                    acc16.data(), bc);
+        lut_rows_dispatch<1>(A + (size_t)i * K, P, K, N, C + (size_t)i * N,
+                             acc16, acc_stride, bc);
     }
+    ::operator delete[](acc16, std::align_val_t(64));
+}
+
+void lut_mm_avx512_mt(const int8_t* A, const int8_t* P, int M, int K, int N,
+                      int32_t* C, int num_threads) {
+    if (num_threads <= 1 || M <= 4) {
+        lut_mm_avx512(A, P, M, K, N, C);
+        return;
+    }
+
+    const int threads = std::min(num_threads, M);
+    std::vector<std::thread> workers;
+    workers.reserve((size_t)threads - 1);
+
+    int start = 0;
+    for (int t = 0; t < threads; ++t) {
+        const int remaining_rows = M - start;
+        const int remaining_threads = threads - t;
+        const int rows = (remaining_rows + remaining_threads - 1) /
+                         remaining_threads;
+        const int row0 = start;
+        start += rows;
+
+        auto run_chunk = [=] {
+            lut_mm_avx512(A + (size_t)row0 * K, P, rows, K, N,
+                          C + (size_t)row0 * N);
+        };
+        if (t + 1 == threads) {
+            run_chunk();
+        } else {
+            workers.emplace_back(run_chunk);
+        }
+    }
+
+    for (auto& worker : workers) worker.join();
 }

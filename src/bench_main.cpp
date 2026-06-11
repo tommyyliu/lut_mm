@@ -3,7 +3,7 @@
 // Experiment harness: verifies every LUT implementation against a naive
 // dense GEMM (exact integer match) and benchmarks all of them.
 //
-// Usage: bench [-m M] [-k K] [-n N] [-r reps] [--seed S]
+// Usage: bench [-m M] [-k K] [-n N] [-r reps] [-t threads] [--seed S]
 
 #include <algorithm>
 #include <chrono>
@@ -96,6 +96,7 @@ int main(int argc, char** argv) {
     const int N = arg_int(argc, argv, "-n", 2048);
     const int reps = arg_int(argc, argv, "-r", 5);
     const int seed = arg_int(argc, argv, "--seed", 42);
+    const int threads = arg_int(argc, argv, "-t", 1);
 
     if (K % 5 != 0) {
         std::fprintf(stderr, "K (%d) must be a multiple of 5\n", K);
@@ -106,7 +107,13 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    std::printf("M=%d K=%d N=%d reps=%d seed=%d\n", M, K, N, reps, seed);
+    if (threads <= 0) {
+        std::fprintf(stderr, "threads must be positive\n");
+        return 1;
+    }
+
+    std::printf("M=%d K=%d N=%d reps=%d seed=%d threads=%d\n", M, K, N, reps,
+                seed, threads);
     std::printf("packed weights: %d bytes vs %d unpacked (%.1fx smaller)\n\n",
                 K / 5 * N, K * N, 5.0);
 
@@ -186,6 +193,12 @@ int main(int argc, char** argv) {
         impls.push_back({"lut_mm_avx512", [&](int32_t* out) {
                              lut_mm_avx512(A.data(), P.data(), M, K, N, out);
                          }});
+        if (threads > 1) {
+            impls.push_back({"lut_mm_avx512_mt", [&](int32_t* out) {
+                                 lut_mm_avx512_mt(A.data(), P.data(), M, K, N,
+                                                  out, threads);
+                             }});
+        }
     } else {
         std::printf("lut_mm_avx512: skipped (CPU lacks AVX-512BW)\n\n");
     }
@@ -194,6 +207,13 @@ int main(int argc, char** argv) {
                              lut_mm_bitnet_tl2(Bf.data(), bitnet_qw.data(),
                                                M, K, N, out);
                          }});
+        if (threads > 1) {
+            impls.push_back({"bitnet_tl2_mt", [&](int32_t* out) {
+                                 lut_mm_bitnet_tl2_mt(
+                                     Bf.data(), bitnet_qw.data(), M, K, N,
+                                     out, threads);
+                             }});
+        }
         if (cpu_has_avx512bw()) {
             impls.push_back({"bitnet_tl2@512b", [&](int32_t* out) {
                                  lut_mm_bitnet_tl2_512(

@@ -21,7 +21,7 @@ bit-identical vectorized version).
 
 ## Results
 
-Ryzen 9 9950X (Zen 5), MSVC 19.51, single-threaded.
+Ryzen 9 9950X (Zen 5), MSVC 19.51, single-threaded unless noted.
 M=256, K=2080, N=2048, random int8 activations, random ternary weights:
 
 | Implementation | min ms | Gop/s | vs naive |
@@ -34,11 +34,23 @@ M=256, K=2080, N=2048, random int8 activations, random ternary weights:
 | bitnet_tl2@512b (our 512-bit port of TL2) | 7.5 | 291.0 | 3.44x |
 | **lut_mm_avx512 (this project's kernel)** | **3.1** | **694.6** | **8.22x** |
 
-At M=256, K=4160, N=4096: lut_mm_avx512 707 Gop/s vs bitnet_tl2@512b 323
+At M=256, K=4160, N=4096: lut_mm_avx512 712 Gop/s vs bitnet_tl2@512b 323
 and bitnet_tl2 172. GEMV (M=1, K=2080) runs in 0.02-0.03 ms (330-430
 Gop/s; timer-noise limited at that scale). Every implementation,
 including BitNet's, produces bit-identical int32 results vs the dense
 GEMM — the harness refuses to benchmark anything that doesn't.
+
+The AVX-512 kernel also has a row-parallel wrapper (`-t threads`). It
+keeps the packed weights shared and splits independent output rows across
+threads:
+
+| Shape | threads | min ms | Gop/s | speedup vs 1T AVX-512 |
+|-------|--------:|-------:|------:|----------------------:|
+| M=256 K=2080 N=2048 | 1 | 3.11 | 702 | 1.0x |
+| M=256 K=2080 N=2048 | 8 | 0.57 | 3814 | 5.5x |
+| M=256 K=4160 N=4096 | 1 | 12.24 | 713 | 1.0x |
+| M=256 K=4160 N=4096 | 32 | 1.64 | 5327 | 7.5x |
+| M=512 K=4160 N=4096 | 32 | 3.14 | 5563 | 7.8x |
 
 † measured by `tools/bench_python.py`. The loop-based lut_mm was timed at
 M=1 (380 ms) and scaled; its rate is M-independent. NumPy has no BLAS
@@ -56,8 +68,9 @@ path for integer dtypes, so its matmul is a plain C loop.
   accumulate. (8 rows would need 32 table registers, which spill and give
   the win back.)
 - **Masked tail**: the last N % 32 columns run the same SIMD body under
-  AVX-512BW masked loads/stores — no scalar tail, no performance cliff at
-  vector boundaries (N=2047 runs within ~20% of N=2048).
+  AVX-512BW masked loads/stores. The int16 accumulator rows are padded to
+  a 32-lane stride, so row starts stay vector-aligned even when N is not
+  a multiple of 32 (N=2047 runs within ~5% of N=2048).
 - **Table construction**: with n = |v| + 121 = 9(h+13) + (l+4), where h is
   the top-3-trit value and l the bottom-2-trit value, T[m] = H[n/9] +
   L[n%9]. H (27 entries) and L (9 entries) are built lane-wise as
@@ -66,7 +79,7 @@ path for integer dtypes, so its matmul is a plain C loop.
   so the four table registers cost ~10 arithmetic ops plus eight
   constant-index `vpermw` — no scalar work, no divide in the data path.
 - **Accumulation**: int16 partial sums, flushed to the int32 output every
-  48 groups (48 × max|entry| 640 = 30720 < 32767, no overflow); the first
+  51 groups (51 × max|entry| 640 = 32640 < 32767, no overflow); the first
   flush stores instead of adds, so the output is never pre-zeroed.
 
 ## The BitNet comparison
@@ -150,12 +163,13 @@ From a VS x64 developer prompt (or after `vcvars64.bat`):
 ```
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
-build\bench.exe [-m M] [-k K] [-n N] [-r reps] [--seed S]
+build\bench.exe [-m M] [-k K] [-n N] [-r reps] [-t threads] [--seed S]
 ```
 
 Defaults: M=256, K=2000, N=2048, 5 reps. K must be a multiple of 5.
 The AVX-512 kernel is detected and skipped at runtime if the CPU lacks
-AVX-512BW.
+AVX-512BW. `-t` adds a multi-threaded AVX-512 implementation to the
+accuracy check and benchmark; the default is `-t 1`.
 
 ## License
 
