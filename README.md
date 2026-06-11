@@ -34,23 +34,25 @@ M=256, K=2080, N=2048, random int8 activations, random ternary weights:
 | bitnet_tl2@512b (our 512-bit port of TL2) | 7.5 | 291.0 | 3.44x |
 | **lut_mm_avx512 (this project's kernel)** | **3.1** | **694.6** | **8.22x** |
 
-At M=256, K=4160, N=4096: lut_mm_avx512 712 Gop/s vs bitnet_tl2@512b 323
+At M=256, K=4160, N=4096: lut_mm_avx512 703 Gop/s vs bitnet_tl2@512b 323
 and bitnet_tl2 172. GEMV (M=1, K=2080) runs in 0.02-0.03 ms (330-430
 Gop/s; timer-noise limited at that scale). Every implementation,
 including BitNet's, produces bit-identical int32 results vs the dense
 GEMM — the harness refuses to benchmark anything that doesn't.
 
-The AVX-512 kernel also has a row-parallel wrapper (`-t threads`). It
-keeps the packed weights shared and splits independent output rows across
-threads:
+Both our kernel and BitNet's have row-parallel wrappers (`-t threads`):
+packed weights stay shared, independent chunks of output rows go to
+threads. Peak for ours is around 8 threads, after which it turns
+memory-bandwidth-bound and degrades; BitNet's TL2 keeps scaling to 16
+threads from its lower single-thread base (peak ~1400 Gop/s). Full sweep
+in [results/thread_scaling.csv](results/thread_scaling.csv), plotted in
+[results/thread_scaling.svg](results/thread_scaling.svg) (regenerate with
+`tools/plot_scaling.py`):
 
 | Shape | threads | min ms | Gop/s | speedup vs 1T AVX-512 |
 |-------|--------:|-------:|------:|----------------------:|
-| M=256 K=2080 N=2048 | 1 | 3.11 | 702 | 1.0x |
-| M=256 K=2080 N=2048 | 8 | 0.57 | 3814 | 5.5x |
-| M=256 K=4160 N=4096 | 1 | 12.24 | 713 | 1.0x |
-| M=256 K=4160 N=4096 | 32 | 1.64 | 5327 | 7.5x |
-| M=512 K=4160 N=4096 | 32 | 3.14 | 5563 | 7.8x |
+| M=256 K=2080 N=2048 | 8 | 0.69 | 3141 | 4.5x |
+| M=256 K=4160 N=4096 | 8 | 1.99 | 4394 | 6.2x |
 
 † measured by `tools/bench_python.py`. The loop-based lut_mm was timed at
 M=1 (380 ms) and scaled; its rate is M-independent. NumPy has no BLAS

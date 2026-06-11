@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <memory>
 #include <new>
 #include <thread>
 #include <vector>
@@ -232,10 +233,17 @@ void lut_mm_avx512(const int8_t* __restrict A, const int8_t* __restrict P,
     const BuildConsts& bc = build_consts();
     const int acc_stride = (N + 31) & ~31;
     const int max_rows = M < 4 ? M : 4;
-    int16_t* acc16 = static_cast<int16_t*>(
-        ::operator new[]((size_t)max_rows * acc_stride * sizeof(int16_t),
-                         std::align_val_t(64)));
-    std::memset(acc16, 0, (size_t)max_rows * acc_stride * sizeof(int16_t));
+    const size_t acc_bytes = (size_t)max_rows * acc_stride * sizeof(int16_t);
+    struct Aligned64Delete {
+        void operator()(int16_t* p) const noexcept {
+            ::operator delete[](p, std::align_val_t(64));
+        }
+    };
+    const std::unique_ptr<int16_t[], Aligned64Delete> acc16_owner(
+        static_cast<int16_t*>(
+            ::operator new[](acc_bytes, std::align_val_t(64))));
+    int16_t* acc16 = acc16_owner.get();
+    std::memset(acc16, 0, acc_bytes);
     int i = 0;
     for (; i + 4 <= M; i += 4) {
         lut_rows_dispatch<4>(A + (size_t)i * K, P, K, N, C + (size_t)i * N,
@@ -249,7 +257,6 @@ void lut_mm_avx512(const int8_t* __restrict A, const int8_t* __restrict P,
         lut_rows_dispatch<1>(A + (size_t)i * K, P, K, N, C + (size_t)i * N,
                              acc16, acc_stride, bc);
     }
-    ::operator delete[](acc16, std::align_val_t(64));
 }
 
 void lut_mm_avx512_mt(const int8_t* A, const int8_t* P, int M, int K, int N,

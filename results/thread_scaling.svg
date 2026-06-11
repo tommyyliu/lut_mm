@@ -3,83 +3,83 @@
 <style>text{font-family:Segoe UI,Arial,sans-serif;fill:#202124} .axis{stroke:#444;stroke-width:1} .grid{stroke:#e6e6e6;stroke-width:1} .label{font-size:13px} .title{font-size:18px;font-weight:600} .tick{font-size:12px;fill:#555} .legend{font-size:13px}</style>
 <text x="550.0" y="24" text-anchor="middle" class="title">Thread scaling: LUT-MM AVX-512 vs BitNet TL2</text>
 <text x="304.0" y="44" text-anchor="middle" class="label">M=256 K=2080 N=2048</text>
-<line x1="72.0" y1="416.0" x2="536.0" y2="416.0" class="grid"/>
-<text x="62.0" y="420.0" text-anchor="end" class="tick">0</text>
-<line x1="72.0" y1="343.2" x2="536.0" y2="343.2" class="grid"/>
-<text x="62.0" y="347.2" text-anchor="end" class="tick">1000</text>
-<line x1="72.0" y1="270.4" x2="536.0" y2="270.4" class="grid"/>
-<text x="62.0" y="274.4" text-anchor="end" class="tick">2000</text>
-<line x1="72.0" y1="197.6" x2="536.0" y2="197.6" class="grid"/>
-<text x="62.0" y="201.6" text-anchor="end" class="tick">3000</text>
-<line x1="72.0" y1="124.8" x2="536.0" y2="124.8" class="grid"/>
-<text x="62.0" y="128.8" text-anchor="end" class="tick">4000</text>
-<line x1="72.0" y1="52.0" x2="536.0" y2="52.0" class="grid"/>
-<text x="62.0" y="56.0" text-anchor="end" class="tick">5000</text>
-<line x1="72.0" y1="52.0" x2="72.0" y2="416.0" class="axis"/>
-<line x1="72.0" y1="416.0" x2="536.0" y2="416.0" class="axis"/>
-<line x1="72.0" y1="416.0" x2="72.0" y2="421.0" stroke="#444"/>
-<text x="72.0" y="438.0" text-anchor="middle" class="tick">1</text>
-<line x1="164.8" y1="416.0" x2="164.8" y2="421.0" stroke="#444"/>
-<text x="164.8" y="438.0" text-anchor="middle" class="tick">2</text>
-<line x1="257.6" y1="416.0" x2="257.6" y2="421.0" stroke="#444"/>
-<text x="257.6" y="438.0" text-anchor="middle" class="tick">4</text>
-<line x1="350.4" y1="416.0" x2="350.4" y2="421.0" stroke="#444"/>
-<text x="350.4" y="438.0" text-anchor="middle" class="tick">8</text>
-<line x1="443.2" y1="416.0" x2="443.2" y2="421.0" stroke="#444"/>
-<text x="443.2" y="438.0" text-anchor="middle" class="tick">16</text>
-<line x1="536.0" y1="416.0" x2="536.0" y2="421.0" stroke="#444"/>
-<text x="536.0" y="438.0" text-anchor="middle" class="tick">32</text>
-<polyline fill="none" stroke="#0b6efd" stroke-width="3" points="72.0,365.4 164.8,320.8 257.6,238.4 350.4,170.7 443.2,194.1 536.0,247.3"/>
-<circle cx="72.0" cy="365.4" r="4" fill="#0b6efd"/>
-<circle cx="164.8" cy="320.8" r="4" fill="#0b6efd"/>
-<circle cx="257.6" cy="238.4" r="4" fill="#0b6efd"/>
-<circle cx="350.4" cy="170.7" r="4" fill="#0b6efd"/>
-<circle cx="443.2" cy="194.1" r="4" fill="#0b6efd"/>
-<circle cx="536.0" cy="247.3" r="4" fill="#0b6efd"/>
-<polyline fill="none" stroke="#d9480f" stroke-width="3" points="72.0,404.2 164.8,393.7 257.6,370.9 350.4,332.6 443.2,317.7 536.0,319.0"/>
+<line x1="72" y1="416.0" x2="536" y2="416.0" class="grid"/>
+<text x="62" y="420.0" text-anchor="end" class="tick">0</text>
+<line x1="72" y1="343.2" x2="536" y2="343.2" class="grid"/>
+<text x="62" y="347.2" text-anchor="end" class="tick">1000</text>
+<line x1="72" y1="270.4" x2="536" y2="270.4" class="grid"/>
+<text x="62" y="274.4" text-anchor="end" class="tick">2000</text>
+<line x1="72" y1="197.6" x2="536" y2="197.6" class="grid"/>
+<text x="62" y="201.6" text-anchor="end" class="tick">3000</text>
+<line x1="72" y1="124.8" x2="536" y2="124.8" class="grid"/>
+<text x="62" y="128.8" text-anchor="end" class="tick">4000</text>
+<line x1="72" y1="52.0" x2="536" y2="52.0" class="grid"/>
+<text x="62" y="56.0" text-anchor="end" class="tick">5000</text>
+<line x1="72" y1="52" x2="72" y2="416" class="axis"/>
+<line x1="72" y1="416" x2="536" y2="416" class="axis"/>
+<line x1="72.0" y1="416" x2="72.0" y2="421" stroke="#444"/>
+<text x="72.0" y="438" text-anchor="middle" class="tick">1</text>
+<line x1="164.8" y1="416" x2="164.8" y2="421" stroke="#444"/>
+<text x="164.8" y="438" text-anchor="middle" class="tick">2</text>
+<line x1="257.6" y1="416" x2="257.6" y2="421" stroke="#444"/>
+<text x="257.6" y="438" text-anchor="middle" class="tick">4</text>
+<line x1="350.4" y1="416" x2="350.4" y2="421" stroke="#444"/>
+<text x="350.4" y="438" text-anchor="middle" class="tick">8</text>
+<line x1="443.2" y1="416" x2="443.2" y2="421" stroke="#444"/>
+<text x="443.2" y="438" text-anchor="middle" class="tick">16</text>
+<line x1="536.0" y1="416" x2="536.0" y2="421" stroke="#444"/>
+<text x="536.0" y="438" text-anchor="middle" class="tick">32</text>
+<polyline fill="none" stroke="#0b6efd" stroke-width="3" points="72.0,365.6 164.8,326.6 257.6,251.3 350.4,187.3 443.2,235.2 536.0,303.7"/>
+<circle cx="72.0" cy="365.6" r="4" fill="#0b6efd"/>
+<circle cx="164.8" cy="326.6" r="4" fill="#0b6efd"/>
+<circle cx="257.6" cy="251.3" r="4" fill="#0b6efd"/>
+<circle cx="350.4" cy="187.3" r="4" fill="#0b6efd"/>
+<circle cx="443.2" cy="235.2" r="4" fill="#0b6efd"/>
+<circle cx="536.0" cy="303.7" r="4" fill="#0b6efd"/>
+<polyline fill="none" stroke="#d9480f" stroke-width="3" points="72.0,404.2 164.8,393.2 257.6,371.6 350.4,339.7 443.2,326.3 536.0,327.9"/>
 <circle cx="72.0" cy="404.2" r="4" fill="#d9480f"/>
-<circle cx="164.8" cy="393.7" r="4" fill="#d9480f"/>
-<circle cx="257.6" cy="370.9" r="4" fill="#d9480f"/>
-<circle cx="350.4" cy="332.6" r="4" fill="#d9480f"/>
-<circle cx="443.2" cy="317.7" r="4" fill="#d9480f"/>
-<circle cx="536.0" cy="319.0" r="4" fill="#d9480f"/>
+<circle cx="164.8" cy="393.2" r="4" fill="#d9480f"/>
+<circle cx="257.6" cy="371.6" r="4" fill="#d9480f"/>
+<circle cx="350.4" cy="339.7" r="4" fill="#d9480f"/>
+<circle cx="443.2" cy="326.3" r="4" fill="#d9480f"/>
+<circle cx="536.0" cy="327.9" r="4" fill="#d9480f"/>
 <text x="840.0" y="44" text-anchor="middle" class="label">M=256 K=4160 N=4096</text>
-<line x1="608.0" y1="416.0" x2="1072.0" y2="416.0" class="grid"/>
-<line x1="608.0" y1="343.2" x2="1072.0" y2="343.2" class="grid"/>
-<line x1="608.0" y1="270.4" x2="1072.0" y2="270.4" class="grid"/>
-<line x1="608.0" y1="197.6" x2="1072.0" y2="197.6" class="grid"/>
-<line x1="608.0" y1="124.8" x2="1072.0" y2="124.8" class="grid"/>
-<line x1="608.0" y1="52.0" x2="1072.0" y2="52.0" class="grid"/>
-<line x1="608.0" y1="52.0" x2="608.0" y2="416.0" class="axis"/>
-<line x1="608.0" y1="416.0" x2="1072.0" y2="416.0" class="axis"/>
-<line x1="608.0" y1="416.0" x2="608.0" y2="421.0" stroke="#444"/>
-<text x="608.0" y="438.0" text-anchor="middle" class="tick">1</text>
-<line x1="700.8" y1="416.0" x2="700.8" y2="421.0" stroke="#444"/>
-<text x="700.8" y="438.0" text-anchor="middle" class="tick">2</text>
-<line x1="793.6" y1="416.0" x2="793.6" y2="421.0" stroke="#444"/>
-<text x="793.6" y="438.0" text-anchor="middle" class="tick">4</text>
-<line x1="886.4" y1="416.0" x2="886.4" y2="421.0" stroke="#444"/>
-<text x="886.4" y="438.0" text-anchor="middle" class="tick">8</text>
-<line x1="979.2" y1="416.0" x2="979.2" y2="421.0" stroke="#444"/>
-<text x="979.2" y="438.0" text-anchor="middle" class="tick">16</text>
-<line x1="1072.0" y1="416.0" x2="1072.0" y2="421.0" stroke="#444"/>
-<text x="1072.0" y="438.0" text-anchor="middle" class="tick">32</text>
-<polyline fill="none" stroke="#0b6efd" stroke-width="3" points="608.0,364.1 700.8,319.8 793.6,225.9 886.4,59.1 979.2,84.6 1072.0,63.7"/>
-<circle cx="608.0" cy="364.1" r="4" fill="#0b6efd"/>
-<circle cx="700.8" cy="319.8" r="4" fill="#0b6efd"/>
-<circle cx="793.6" cy="225.9" r="4" fill="#0b6efd"/>
-<circle cx="886.4" cy="59.1" r="4" fill="#0b6efd"/>
-<circle cx="979.2" cy="84.6" r="4" fill="#0b6efd"/>
-<circle cx="1072.0" cy="63.7" r="4" fill="#0b6efd"/>
-<polyline fill="none" stroke="#d9480f" stroke-width="3" points="608.0,403.4 700.8,390.9 793.6,367.4 886.4,321.4 979.2,295.9 1072.0,297.4"/>
-<circle cx="608.0" cy="403.4" r="4" fill="#d9480f"/>
-<circle cx="700.8" cy="390.9" r="4" fill="#d9480f"/>
-<circle cx="793.6" cy="367.4" r="4" fill="#d9480f"/>
-<circle cx="886.4" cy="321.4" r="4" fill="#d9480f"/>
-<circle cx="979.2" cy="295.9" r="4" fill="#d9480f"/>
-<circle cx="1072.0" cy="297.4" r="4" fill="#d9480f"/>
+<line x1="608" y1="416.0" x2="1072" y2="416.0" class="grid"/>
+<line x1="608" y1="343.2" x2="1072" y2="343.2" class="grid"/>
+<line x1="608" y1="270.4" x2="1072" y2="270.4" class="grid"/>
+<line x1="608" y1="197.6" x2="1072" y2="197.6" class="grid"/>
+<line x1="608" y1="124.8" x2="1072" y2="124.8" class="grid"/>
+<line x1="608" y1="52.0" x2="1072" y2="52.0" class="grid"/>
+<line x1="608" y1="52" x2="608" y2="416" class="axis"/>
+<line x1="608" y1="416" x2="1072" y2="416" class="axis"/>
+<line x1="608.0" y1="416" x2="608.0" y2="421" stroke="#444"/>
+<text x="608.0" y="438" text-anchor="middle" class="tick">1</text>
+<line x1="700.8" y1="416" x2="700.8" y2="421" stroke="#444"/>
+<text x="700.8" y="438" text-anchor="middle" class="tick">2</text>
+<line x1="793.6" y1="416" x2="793.6" y2="421" stroke="#444"/>
+<text x="793.6" y="438" text-anchor="middle" class="tick">4</text>
+<line x1="886.4" y1="416" x2="886.4" y2="421" stroke="#444"/>
+<text x="886.4" y="438" text-anchor="middle" class="tick">8</text>
+<line x1="979.2" y1="416" x2="979.2" y2="421" stroke="#444"/>
+<text x="979.2" y="438" text-anchor="middle" class="tick">16</text>
+<line x1="1072.0" y1="416" x2="1072.0" y2="421" stroke="#444"/>
+<text x="1072.0" y="438" text-anchor="middle" class="tick">32</text>
+<polyline fill="none" stroke="#0b6efd" stroke-width="3" points="608.0,364.8 700.8,318.3 793.6,229.3 886.4,96.1 979.2,102.7 1072.0,138.0"/>
+<circle cx="608.0" cy="364.8" r="4" fill="#0b6efd"/>
+<circle cx="700.8" cy="318.3" r="4" fill="#0b6efd"/>
+<circle cx="793.6" cy="229.3" r="4" fill="#0b6efd"/>
+<circle cx="886.4" cy="96.1" r="4" fill="#0b6efd"/>
+<circle cx="979.2" cy="102.7" r="4" fill="#0b6efd"/>
+<circle cx="1072.0" cy="138.0" r="4" fill="#0b6efd"/>
+<polyline fill="none" stroke="#d9480f" stroke-width="3" points="608.0,403.6 700.8,391.6 793.6,368.0 886.4,327.5 979.2,314.4 1072.0,298.1"/>
+<circle cx="608.0" cy="403.6" r="4" fill="#d9480f"/>
+<circle cx="700.8" cy="391.6" r="4" fill="#d9480f"/>
+<circle cx="793.6" cy="368.0" r="4" fill="#d9480f"/>
+<circle cx="886.4" cy="327.5" r="4" fill="#d9480f"/>
+<circle cx="979.2" cy="314.4" r="4" fill="#d9480f"/>
+<circle cx="1072.0" cy="298.1" r="4" fill="#d9480f"/>
 <text x="550.0" y="466" text-anchor="middle" class="label">Threads (log2 scale)</text>
-<text x="18" y="240.0" transform="rotate(-90 18 240.0)" text-anchor="middle" class="label">Throughput (Gop/s)</text>
+<text x="18" y="240" transform="rotate(-90 18 240)" text-anchor="middle" class="label">Throughput (Gop/s)</text>
 <line x1="840" y1="18" x2="870" y2="18" stroke="#0b6efd" stroke-width="3"/>
 <text x="878" y="22" class="legend">LUT-MM AVX-512</text>
 <line x1="840" y1="38" x2="870" y2="38" stroke="#d9480f" stroke-width="3"/>

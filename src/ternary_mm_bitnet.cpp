@@ -21,9 +21,9 @@
 #define GGML_BITNET_X86_TL2
 #include "generated/bitnet-lut-kernels.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <algorithm>
 #include <thread>
 #include <vector>
 
