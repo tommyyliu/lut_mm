@@ -40,6 +40,18 @@ bool cpu_has_avx512bw() {
 #endif
 }
 
+bool cpu_has_avx512vnni() {
+#if defined(_MSC_VER)
+    if (!cpu_has_avx512bw()) return false;
+    int info[4];
+    __cpuidex(info, 7, 0);
+    return (info[2] & (1 << 11)) != 0;  // AVX512_VNNI
+#else
+    return __builtin_cpu_supports("avx512bw") &&
+           __builtin_cpu_supports("avx512vnni");
+#endif
+}
+
 double time_ms(const std::function<void()>& fn) {
     const auto t0 = std::chrono::steady_clock::now();
     fn();
@@ -116,6 +128,8 @@ int main(int argc, char** argv) {
                 seed, threads);
     std::printf("packed weights: %d bytes vs %d unpacked (%.1fx smaller)\n\n",
                 K / 5 * N, K * N, 5.0);
+    const bool has_avx512bw = cpu_has_avx512bw();
+    const bool has_avx512vnni = cpu_has_avx512vnni();
 
     // Separate streams so W depends only on (K, N, seed) — prepacked
     // weight files (--dump-w / --bitnet) stay valid across different M.
@@ -132,6 +146,22 @@ int main(int argc, char** argv) {
 
     const double pack_ms = time_ms([&] { pack_weights(W.data(), K, N, P.data()); });
     std::printf("pack_weights: %.2f ms (one-time)\n\n", pack_ms);
+
+    std::vector<int8_t> W_vnni;
+    std::vector<int32_t> W_col_sums;
+    if (has_avx512vnni) {
+        W_vnni.resize(vnni_weight_bytes(K, N));
+        W_col_sums.resize((size_t)N);
+        const double vnni_pack_ms = time_ms([&] {
+            pack_weights_vnni(W.data(), K, N, W_vnni.data(),
+                              W_col_sums.data());
+        });
+        std::printf("pack_weights_vnni: %.2f ms (one-time, %zu bytes)\n\n",
+                    vnni_pack_ms, W_vnni.size());
+    } else {
+        std::printf(
+            "naive_mm_vnni: skipped (CPU lacks AVX-512 VNNI/BW)\n\n");
+    }
 
     // --dump-w: write the raw weight matrix for tools/pack_tl2.py and exit.
     // The same seed regenerates identical weights on the benchmark run.
@@ -189,7 +219,14 @@ int main(int argc, char** argv) {
         {"naive_mm",
          [&](int32_t* out) { naive_mm(A.data(), W.data(), M, K, N, out); }},
     };
-    if (cpu_has_avx512bw()) {
+    if (has_avx512vnni) {
+        impls.push_back({"naive_mm_vnni", [&](int32_t* out) {
+                             naive_mm_avx512_vnni(
+                                 A.data(), W_vnni.data(), W_col_sums.data(),
+                                 M, K, N, out);
+                         }});
+    }
+    if (has_avx512bw) {
         impls.push_back({"lut_mm_avx512", [&](int32_t* out) {
                              lut_mm_avx512(A.data(), P.data(), M, K, N, out);
                          }});
@@ -214,7 +251,7 @@ int main(int argc, char** argv) {
                                      out, threads);
                              }});
         }
-        if (cpu_has_avx512bw()) {
+        if (has_avx512bw) {
             impls.push_back({"bitnet_tl2@512b", [&](int32_t* out) {
                                  lut_mm_bitnet_tl2_512(
                                      Bf.data(), bitnet_qw.data(), M, K, N,

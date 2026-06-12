@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 // Ternary-weight matrix multiplication via packed weights and lookup tables.
@@ -21,6 +22,19 @@ void pack_weights(const int8_t* W, int K, int N, int8_t* P);
 // Ground-truth dense GEMM on the unpacked weights: C = A * W.
 void naive_mm(const int8_t* A, const int8_t* W, int M, int K, int N,
               int32_t* C);
+
+// Dense one-byte-per-weight AVX-512 VNNI baseline. The VNNI layout is not
+// compressed: it only interleaves each K block of 4 weights for 16 columns,
+// so vpdpbusd can compute 16 int32 dot products per instruction. col_sums
+// holds sum_k W[k, j], used to undo the unsigned-activation bias required by
+// AVX-512 VNNI's uint8*sint8 dot-product instruction.
+std::size_t vnni_weight_bytes(int K, int N);
+void pack_weights_vnni(const int8_t* W, int K, int N, int8_t* WV,
+                       int32_t* col_sums);
+void naive_mm_avx512_vnni(const int8_t* __restrict A,
+                          const int8_t* __restrict WV,
+                          const int32_t* __restrict col_sums, int M, int K,
+                          int N, int32_t* __restrict C);
 
 // LUT-based GEMM on packed weights: AVX-512 (F+BW) vpermt2w lookups over
 // the 122 mirror-reduced magnitudes. See ternary_mm_avx512.cpp for the

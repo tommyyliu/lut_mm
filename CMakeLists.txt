@@ -8,6 +8,7 @@ add_executable(bench
     src/bench_main.cpp
     src/ternary_mm_ref.cpp
     src/ternary_mm_avx512.cpp
+    src/ternary_mm_vnni.cpp
     src/ternary_mm_bitnet.cpp
     src/ternary_mm_bitnet512.cpp
 )
@@ -20,6 +21,8 @@ if(MSVC)
         PROPERTIES COMPILE_OPTIONS "/arch:AVX2")
     set_source_files_properties(src/ternary_mm_avx512.cpp
         PROPERTIES COMPILE_OPTIONS "/arch:AVX512")
+    set_source_files_properties(src/ternary_mm_vnni.cpp
+        PROPERTIES COMPILE_OPTIONS "/arch:AVX512")
     # /wd4068: the generated BitNet code uses #pragma unroll
     set_source_files_properties(src/ternary_mm_bitnet.cpp
         PROPERTIES COMPILE_OPTIONS "/arch:AVX2;/wd4068")
@@ -31,6 +34,8 @@ else()
         PROPERTIES COMPILE_OPTIONS "-mavx2")
     set_source_files_properties(src/ternary_mm_avx512.cpp
         PROPERTIES COMPILE_OPTIONS "-mavx512f;-mavx512bw")
+    set_source_files_properties(src/ternary_mm_vnni.cpp
+        PROPERTIES COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512vnni")
     set_source_files_properties(src/ternary_mm_bitnet.cpp
         PROPERTIES COMPILE_OPTIONS "-mavx2")
     set_source_files_properties(src/ternary_mm_bitnet512.cpp

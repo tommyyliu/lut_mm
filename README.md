@@ -32,6 +32,7 @@ M=256, K=2080, N=2048, random int8 activations, random ternary weights:
 | naive_mm (C++, AVX2 auto-vectorized by MSVC) | 25.8 | 84.5 | 1.00x |
 | bitnet_tl2 (microsoft/BitNet's AVX2 pshufb) | 13.3 | 163.5 | 1.94x |
 | bitnet_tl2@512b (our 512-bit port of TL2) | 7.5 | 291.0 | 3.44x |
+| naive_mm_vnni (dense int8, AVX-512 VNNI `vpdpbusd`) | 3.9 | 553.7 | 6.60x |
 | **lut_mm_avx512 (this project's kernel)** | **3.1** | **694.6** | **8.22x** |
 
 At M=256, K=4160, N=4096: lut_mm_avx512 703 Gop/s vs bitnet_tl2@512b 323
@@ -39,6 +40,17 @@ and bitnet_tl2 172. GEMV (M=1, K=2080) runs in 0.02-0.03 ms (330-430
 Gop/s; timer-noise limited at that scale). Every implementation,
 including BitNet's, produces bit-identical int32 results vs the dense
 GEMM — the harness refuses to benchmark anything that doesn't.
+
+`naive_mm_vnni` is the strongest dense baseline this hardware offers —
+unpacked int8 weights fed to the dual-pumped `vpdpbusd` dot-product
+instruction. The LUT kernel beats it by 1.27x at the cache-resident
+shape above, and the gap grows with size because dense weights are 5x
+the bytes (M=256, single thread, Gop/s LUT vs VNNI): 714 vs 347 at
+K=4160, 639 vs 123 at K=8320 — where 68 MB of dense weights fall out
+of L3 but 13.6 MB packed still fits — and 482 vs 110 at K=16640, where
+both spill and the ratio settles near the 5x density advantage. The
+compression is not just a footprint feature; it is what keeps the
+kernel compute-bound at LLM-layer sizes.
 
 Both our kernel and BitNet's have row-parallel wrappers (`-t threads`):
 packed weights stay shared, independent chunks of output rows go to
@@ -153,6 +165,7 @@ the cleanup but live at commit `b84eb3e`.
 - `src/ternary_mm.h` — shapes, packing format, public API
 - `src/ternary_mm_ref.cpp` — `pack_weights` and the naive ground-truth GEMM
 - `src/ternary_mm_avx512.cpp` — the kernel
+- `src/ternary_mm_vnni.cpp` — dense AVX-512 VNNI baseline (`vpdpbusd`)
 - `src/ternary_mm_bitnet.cpp`, `src/ternary_mm_bitnet512.cpp`,
   `src/generated/` — the BitNet comparison
 - `src/bench_main.cpp` — harness: bit-exact verification, then timing
@@ -170,7 +183,7 @@ build\bench.exe [-m M] [-k K] [-n N] [-r reps] [-t threads] [--seed S]
 
 Defaults: M=256, K=2000, N=2048, 5 reps. K must be a multiple of 5.
 The AVX-512 kernel is detected and skipped at runtime if the CPU lacks
-AVX-512BW. `-t` adds a multi-threaded AVX-512 implementation to the
+AVX-512BW; the VNNI baseline likewise requires AVX-512 VNNI. `-t` adds a multi-threaded AVX-512 implementation to the
 accuracy check and benchmark; the default is `-t 1`.
 
 ## License
