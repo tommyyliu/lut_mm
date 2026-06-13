@@ -28,40 +28,39 @@ M=256, K=2080, N=2048, random int8 activations, random ternary weights.
 The kernel builds and runs on both MSVC and gcc; Gop/s for each below
 (MSVC 19.51 / gcc 16, same machine):
 
-| Implementation | MSVC Gop/s | gcc Gop/s | vs naive |
-|----------------|-----------:|----------:|---------:|
-| naive_mm (C++, AVX2 auto-vectorized) | 84.2 | 101.0 | 1.00x |
-| bitnet_tl2 (microsoft/BitNet's AVX2 pshufb) | 173.4 | — | 2.06x |
-| bitnet_tl2@512b (our 512-bit port of TL2) | 329.3 | — | 3.91x |
-| dense_mm_vnni (dense int8, AVX-512 VNNI `vpdpbusd`) | 555.2 | 555.3 | 6.59x |
-| **lut_mm_avx512 (this project's kernel)** | **704.3** | **698.7** | **8.37x** |
+| Implementation | MSVC min ms | MSVC Gop/s | gcc Gop/s | vs naive |
+|----------------|------------:|-----------:|----------:|---------:|
+| naive_mm (C++, AVX2 auto-vectorized) | 25.6 | 85.1 | 101.0 | 1.00x |
+| bitnet_tl2 (microsoft/BitNet's AVX2 pshufb) | 12.0 | 182.1 | — | 2.14x |
+| bitnet_tl2@512b (our 512-bit port of TL2) | 6.4 | 342.9 | — | 4.03x |
+| dense_mm_vnni (dense int8, AVX-512 VNNI `vpdpbusd`) | 3.9 | 563.3 | 555.3 | 6.62x |
+| **lut_mm_avx512 (this project's kernel)** | **3.1** | **710.4** | **698.7** | **8.35x** |
 
-The `vs naive` column is the MSVC ratio. The kernel itself is within ~1%
-across compilers (704 vs 699 Gop/s) — it is hand-written intrinsics, so
-codegen barely moves it. `dense_mm_vnni` is identical (a single hardware
-instruction). What does shift is the naive baseline: gcc auto-vectorizes
-it ~20% faster (84→101 Gop/s), so on gcc the "vs naive" ratio is smaller
-(6.92x, not 8.37x) — the baseline improving, not the kernel regressing.
-BitNet rows are MSVC-only here (their kernels need a codegen step); the
-shape-specialized comparison is unaffected by the host compiler.
+The `vs naive` column is the MSVC ratio. The hand-written intrinsic
+kernels stay within ~2% across compilers. What does shift is the naive
+baseline: gcc auto-vectorizes it faster (85→101 Gop/s), so on gcc the
+kernel's "vs naive" ratio is smaller (6.92x rather than 8.35x) — the
+baseline improving, not the kernel regressing. BitNet rows are MSVC-only
+here (their kernels need a codegen step).
 
-(Best of 9 reps; on Windows a bare `build\bench.exe` reproduces this
-shape, on Linux the `bench` binary built per the instructions below.) So the
-kernel is 4.1x faster than BitNet's AVX2 TL2 kernel and 2.1x faster than
-our 512-bit TL2 port. BitNet's kernels emit float (their native
-dequantized output); the harness converts that to int32 for the
-bit-exact check *outside* the timed region, the same concession it makes
-for the int8→float input — so their timings cover only their kernel.
+(MSVC: best of 15 reps; gcc: separate Linux/gcc 16 run. A bare
+`build\bench.exe` reproduces this shape on Windows; on Linux use the
+`bench` binary built per the instructions below.) The kernel is 3.9x
+faster than BitNet's AVX2 TL2 kernel and 2.07x faster than our 512-bit TL2
+port. The comparison is like for like: the timed region is the integer
+matmul on both sides, with no float quantize/dequantize in either BitNet
+adapter (the int8→float input expected by BitNet's LUT constructors is
+built once outside the timed region, a concession in its favor).
 
-At M=256, K=4160, N=4096: lut_mm_avx512 718 Gop/s vs bitnet_tl2@512b 352
-and bitnet_tl2 180. GEMV (M=1, K=2080) runs in 0.02-0.03 ms (330-430
+At M=256, K=4160, N=4096: lut_mm_avx512 718 Gop/s vs bitnet_tl2@512b 357
+and bitnet_tl2 182. GEMV (M=1, K=2080) runs in 0.02-0.03 ms (330-430
 Gop/s; timer-noise limited at that scale). Every implementation,
 including BitNet's, produces bit-identical int32 results vs the dense
 GEMM — the harness refuses to benchmark anything that doesn't.
 
 `dense_mm_vnni` is the strongest dense baseline this hardware offers —
 unpacked int8 weights fed to the dual-pumped `vpdpbusd` dot-product
-instruction. The LUT kernel beats it by 1.27x at the cache-resident
+instruction. The LUT kernel beats it by 1.26x at the cache-resident
 shape above, and the gap stays modest while the dense weights still fit
 this CPU's 32 MB L3 (1.5x at K=4160, 17 MB; M=256, single thread, Gop/s
 LUT vs VNNI: 718 vs 485). It blows open once they spill: at K=8320 the
@@ -132,11 +131,12 @@ faithfully, this repo runs their actual code, not a reimplementation:
 - `tools/pack_tl2.py` packs weights with their numpy preprocessing,
   copied verbatim.
 - `src/ternary_mm_bitnet.cpp` forces their activation-quantization scale
-  to 1.0 — our activations are already int8 — which makes their kernel
-  exact, so it participates in the bit-exact accuracy check.
+  to 1.0 — our activations are already int8 — and replaces the generated
+  float dequantization epilogue with an exact int32 epilogue, so it
+  participates directly in the bit-exact accuracy check.
 - `src/ternary_mm_bitnet512.cpp` is our faithful 512-bit widening of
-  their three-trit sweep (same packed blob; their LUT constructor and
-  small two-trit tail kept as shipped), so the width comparison is
+  their three-trit sweep (same packed blob, LUT constructor, sign
+  convention, and int32 tail epilogue), so the width comparison is
   measured rather than estimated.
 
 Their kernels are shape-specialized at codegen time; K=2080/N=2048 and
@@ -160,25 +160,26 @@ the cleanup but live at commit `b84eb3e`.
   `vpgatherdd` into the 243-entry table — ties the plain scalar loop
   (~47 Gop/s both; gather is microcoded on Zen, ~1 lookup/cycle) and
   loses to the auto-vectorized dense GEMM. BitNet's pshufb design beats
-  it 3.7x in the same ISA class. Lookup throughput is everything.
+  it 3.9x in the same ISA class. Lookup throughput is everything.
 - **Width vs design, measured as a 2x2** (Gop/s at K=2080, matched v1
   sweep implementations on both sides):
 
   | | 256-bit | 512-bit | width scaling |
   |---|---:|---:|---:|
-  | TL2 3-trit pshufb | 173 | 329 | 1.90x |
+  | TL2 3-trit pshufb | 182 | 343 | 1.88x |
   | ours 5-trit vpermt2w | 155 | 355 | 2.29x |
 
-  At equal 256-bit width TL2 is ~12% ahead — it does more, cheaper
+  At equal 256-bit width TL2 is ~17% ahead — it does more, cheaper
   lookups, while ours does one lookup per 5 weights but pays a 4-permute
   + 3-blend select tree. What flips the result is scaling: the 5-trit
-  format gains superlinearly with width (2.29x vs 1.90x), because the
+  format gains superlinearly with width (2.29x vs 1.88x), because the
   two-register permute's table capacity doubles along with the lanes,
   collapsing the select tree to 2 permutes + 1 blend. At matched 512-bit
-  width ours pulls ~8% ahead while storing weights 4.6% denser. TL2
-  remains the better design for AVX2-only hardware, where no shuffle can
-  index 122 entries; the 5-trit format only wins once AVX-512 unlocks the
-  wide table.
+  width the two pull level (within a few percent), with ours storing
+  weights 4.6% denser. TL2 remains the better design for AVX2-only
+  hardware, where no shuffle can index 122 entries; the 5-trit format's
+  decisive advantage is not matched-width speed but its 5x density at
+  large matrices (the VNNI comparison above).
 - **Optimization passes** took the kernel from 355 to 695 Gop/s: SIMD
   table build replacing a serial scalar build (~40% of runtime), 4-row
   decode sharing, masked tails, and first-flush-store.

@@ -216,9 +216,6 @@ int main(int argc, char** argv) {
     struct Impl {
         const char* name;
         std::function<void(int32_t*)> run;
-        // Post-kernel fixup for the accuracy check only; never timed. The
-        // BitNet impls use it to reinterpret their float output as int32.
-        std::function<void(int32_t*)> finalize = [](int32_t*) {};
     };
     std::vector<Impl> impls = {
         {"naive_mm",
@@ -245,26 +242,23 @@ int main(int argc, char** argv) {
         std::printf("lut_mm_avx512: skipped (CPU lacks AVX-512BW)\n\n");
     }
     if (!bitnet_qw.empty()) {
-        const auto to_int32 = [&](int32_t* out) {
-            bitnet_tl2_to_int32(out, M, N);
-        };
         impls.push_back({"bitnet_tl2", [&](int32_t* out) {
                              lut_mm_bitnet_tl2(Bf.data(), bitnet_qw.data(),
                                                M, K, N, out);
-                         }, to_int32});
+                         }});
         if (threads > 1) {
             impls.push_back({"bitnet_tl2_mt", [&](int32_t* out) {
                                  lut_mm_bitnet_tl2_mt(
                                      Bf.data(), bitnet_qw.data(), M, K, N,
                                      out, threads);
-                             }, to_int32});
+                             }});
         }
         if (has_avx512bw) {
             impls.push_back({"bitnet_tl2@512b", [&](int32_t* out) {
                                  lut_mm_bitnet_tl2_512(
                                      Bf.data(), bitnet_qw.data(), M, K, N,
                                      out);
-                             }, to_int32});
+                             }});
         }
     }
 
@@ -274,7 +268,6 @@ int main(int argc, char** argv) {
     bool all_ok = true;
     for (size_t s = 1; s < impls.size(); ++s) {
         impls[s].run(C.data());
-        impls[s].finalize(C.data());
         const size_t bad = verify(impls[s].name, C, C_ref, N);
         std::printf("  %-14s %s\n", impls[s].name,
                     bad ? "FAIL" : "PASS");

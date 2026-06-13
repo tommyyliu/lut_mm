@@ -46,13 +46,9 @@ void lut_mm_avx512_mt(const int8_t* A, const int8_t* P, int M, int K, int N,
 
 // microsoft/BitNet TL2 kernels (AVX2), for comparison. B is the float copy
 // of the activations; qw is the weight blob from tools/pack_tl2.py. Only
-// shapes baked into the generated kernels are supported.
-//
-// These kernels leave their native float (dequantized) result in C. Turning
-// it into int32 for the bit-exact check is comparison scaffolding, not part
-// of their kernel, so it is a separate call (bitnet_tl2_to_int32) the harness
-// runs outside the timed region — same treatment as the int8->float input
-// conversion, both concessions in BitNet's favor.
+// shapes baked into the generated kernels are supported. The adapter forces
+// unit scales and leaves exact int32 sums in C instead of BitNet's native
+// dequantized-float output.
 bool bitnet_tl2_supported(int K, int N);
 void lut_mm_bitnet_tl2(const float* B, const uint8_t* qw, int M, int K,
                        int N, int32_t* C);
@@ -64,14 +60,8 @@ void lut_mm_bitnet_tl2_mt(const float* B, const uint8_t* qw, int M, int K,
 void lut_mm_bitnet_tl2_512(const float* B, const uint8_t* qw, int M, int K,
                            int N, int32_t* C);
 
-// Reinterpret the BitNet kernels' float output in C as int32 (exact, since
-// the forced unit scale makes every sum an integer < 2^24). Run after the
-// kernel, outside timing, to feed the bit-exact accuracy check.
-void bitnet_tl2_to_int32(int32_t* C, int M, int N);
-
 // Internal: TL2 pieces shared between the AVX2 adapter and the 512 port.
 void bitnet_tl2_prep_row(const float* b, int K, int8_t* qlut3, int8_t* qlut2,
                          float* lut_scales);
-void bitnet_tl2_two_qgemm(int K, const uint8_t* idx2_tile,
-                          const int8_t* qlut2, const float* scales,
-                          const float* lut_scales, void* ct);
+void bitnet_tl2_two_qgemm_int32(int K, const uint8_t* idx2_tile,
+                                const int8_t* qlut2, int32_t* ct);

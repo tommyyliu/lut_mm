@@ -22,7 +22,6 @@
 #include "generated/bitnet-lut-kernels.h"
 
 #include <algorithm>
-#include <cmath>
 #include <cstring>
 #include <thread>
 #include <vector>
@@ -35,8 +34,9 @@ bool bitnet_tl2_supported(int K, int N) {
 
 // Shared with the 512-bit port (ternary_mm_bitnet512.cpp), which cannot
 // include the generated header itself: that would duplicate its non-inline
-// functions. The prep (quant scan + LUT ctors) and the small two-trit tail
-// stay BitNet's original 256-bit code in both variants.
+// functions. The prep keeps BitNet's quant scan + LUT constructors; the
+// two-trit tail reuses BitNet's AVX2 table sweep but leaves exact int32
+// sums instead of running the generated float dequantization epilogue.
 void bitnet_tl2_prep_row(const float* b, int K, int8_t* qlut3, int8_t* qlut2,
                          float* lut_scales) {
     bitnet_float_type* bm = const_cast<float*>(b);
@@ -52,15 +52,30 @@ void bitnet_tl2_prep_row(const float* b, int K, int8_t* qlut3, int8_t* qlut2,
     }
 }
 
-void bitnet_tl2_two_qgemm(int K, const uint8_t* idx2_tile,
-                          const int8_t* qlut2, const float* scales,
-                          const float* lut_scales, void* ct) {
+void bitnet_tl2_two_qgemm_int32(int K, const uint8_t* idx2_tile,
+                                const int8_t* qlut2, int32_t* ct) {
     if (K == 2080) {
-        two_qgemm_lut_2048_2080<1>((void*)idx2_tile, (void*)qlut2,
-                                   (void*)scales, (void*)lut_scales, ct);
+        alignas(32) int32_t bits[BM2048_2080];
+        std::memset(bits, 0, sizeof(bits));
+        for (int k_outer = 0; k_outer < 64 / 32; ++k_outer) {
+            two_tbl_impl2048_2080<1, 64>(
+                bits,
+                const_cast<int8_t*>(qlut2 + k_outer * BK2 / 2 * 32),
+                const_cast<uint8_t*>(idx2_tile +
+                                     k_outer * BK2 / 2 / 2 * BM2048_2080));
+        }
+        for (int i = 0; i < BM2048_2080; ++i) ct[i] += bits[i];
     } else if (K == 4160) {
-        two_qgemm_lut_4096_4160<1>((void*)idx2_tile, (void*)qlut2,
-                                   (void*)scales, (void*)lut_scales, ct);
+        alignas(32) int32_t bits[BM4096_4160];
+        std::memset(bits, 0, sizeof(bits));
+        for (int k_outer = 0; k_outer < 32 / 32; ++k_outer) {
+            two_tbl_impl4096_4160<1, 32>(
+                bits,
+                const_cast<int8_t*>(qlut2 + k_outer * BK2 / 2 * 32),
+                const_cast<uint8_t*>(idx2_tile +
+                                     k_outer * BK2 / 2 / 2 * BM4096_4160));
+        }
+        for (int i = 0; i < BM4096_4160; ++i) ct[i] += bits[i];
     }
 }
 
@@ -72,7 +87,6 @@ void lut_mm_bitnet_tl2(const float* B, const uint8_t* qw, int M, int K,
     std::vector<int8_t> qlut3((size_t)three_k / 3 * 32);
     std::vector<int8_t> qlut2((size_t)two_k / 2 * 32);
     bitnet_float_type lut_scales[1];
-    bitnet_float_type weight_scales[1] = {1.0f};
 
     const size_t idx3_tile = (size_t)256 * three_k / 6;
     const uint8_t* sgn = qw + (size_t)N * three_k / 6;
@@ -88,39 +102,23 @@ void lut_mm_bitnet_tl2(const float* B, const uint8_t* qw, int M, int K,
 
         if (K == 2080 && N == 2048) {
             for (int t = 0; t < N / 256; ++t) {
-                void* ct = crow + (size_t)t * 256;
+                int32_t* ct = crow + (size_t)t * 256;
                 three_qgemm_lut_2048_2080<1>(
                     (void*)(qw + t * idx3_tile), (void*)(sgn + t * sgn_tile),
-                    qlut3.data(), weight_scales, lut_scales, ct);
-                two_qgemm_lut_2048_2080<1>((void*)(idx2 + t * idx2_tile),
-                                           qlut2.data(), weight_scales,
-                                           lut_scales, ct);
+                    qlut3.data(), nullptr, lut_scales, ct);
+                bitnet_tl2_two_qgemm_int32(K, idx2 + t * idx2_tile,
+                                           qlut2.data(), ct);
             }
         } else if (K == 4160 && N == 4096) {
             for (int t = 0; t < N / 256; ++t) {
-                void* ct = crow + (size_t)t * 256;
+                int32_t* ct = crow + (size_t)t * 256;
                 three_qgemm_lut_4096_4160<1>(
                     (void*)(qw + t * idx3_tile), (void*)(sgn + t * sgn_tile),
-                    qlut3.data(), weight_scales, lut_scales, ct);
-                two_qgemm_lut_4096_4160<1>((void*)(idx2 + t * idx2_tile),
-                                           qlut2.data(), weight_scales,
-                                           lut_scales, ct);
+                    qlut3.data(), nullptr, lut_scales, ct);
+                bitnet_tl2_two_qgemm_int32(K, idx2 + t * idx2_tile,
+                                           qlut2.data(), ct);
             }
         }
-
-        // two_qgemm_lut leaves float values in C — BitNet's native output.
-        // The int32 readback for the bit-exact check is bitnet_tl2_to_int32,
-        // run by the harness outside the timed region.
-    }
-}
-
-void bitnet_tl2_to_int32(int32_t* C, int M, int N) {
-    // Sums are bounded by K * 127 < 2^24, so the floats are exact integers.
-    const size_t n = (size_t)M * N;
-    for (size_t i = 0; i < n; ++i) {
-        float f;
-        std::memcpy(&f, C + i, sizeof(f));
-        C[i] = (int32_t)lrintf(f);
     }
 }
 

@@ -4,9 +4,9 @@
 //
 // A direct 512-bit widening of BitNet's TL2 three-trit sweep, so the
 // "width vs design" comparison has a measured TL2@512 instead of an
-// estimate. The packed weight blob, LUT construction, sign convention and
-// two-trit tail are unchanged (the latter two run BitNet's original
-// 256-bit code via ternary_mm_bitnet.cpp); only three_tbl_impl is widened.
+// estimate. The packed weight blob, LUT construction and sign convention
+// are unchanged; only three_tbl_impl is widened. The two-trit tail reuses
+// the AVX2 exact-int32 wrapper from ternary_mm_bitnet.cpp.
 //
 // The widening exploits their layout directly: consecutive index-byte
 // positions of a 32-row block are adjacent in memory, so one 64-byte load
@@ -146,7 +146,6 @@ void lut_mm_bitnet_tl2_512(const float* B, const uint8_t* qw, int M, int K,
     std::vector<int8_t> qlut3((size_t)three_k / 3 * 32);
     std::vector<int8_t> qlut2((size_t)two_k / 2 * 32);
     float lut_scales[1];
-    float weight_scales[1] = {1.0f};
 
     const size_t idx3_tile = (size_t)256 * three_k / 6;
     const uint8_t* sgn = qw + (size_t)N * three_k / 6;
@@ -169,11 +168,8 @@ void lut_mm_bitnet_tl2_512(const float* B, const uint8_t* qw, int M, int K,
                 three_qgemm_lut_512<256, 96, 4128>(
                     qw + t * idx3_tile, sgn + t * sgn_tile, qlut3.data(), ct);
             }
-            bitnet_tl2_two_qgemm(K, idx2 + t * idx2_tile, qlut2.data(),
-                                 weight_scales, lut_scales, ct);
+            bitnet_tl2_two_qgemm_int32(K, idx2 + t * idx2_tile, qlut2.data(),
+                                       ct);
         }
-
-        // Float result left in C (BitNet's native output); the int32
-        // readback runs outside timing via bitnet_tl2_to_int32.
     }
 }
