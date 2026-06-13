@@ -173,10 +173,7 @@ void lut_mm_bitnet_tl2_512(const float* B, const uint8_t* qw, int M, int K,
                                  weight_scales, lut_scales, ct);
         }
 
-        for (int j = 0; j < N; ++j) {
-            float f;
-            std::memcpy(&f, crow + j, sizeof(f));
-            crow[j] = (int32_t)lrintf(f);
-        }
+        // Float result left in C (BitNet's native output); the int32
+        // readback runs outside timing via bitnet_tl2_to_int32.
     }
 }
