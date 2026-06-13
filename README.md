@@ -17,7 +17,9 @@ built around three ideas:
    `vpermt2w`, turning lookups into register-resident shuffles.
 
 A NumPy sketch of the idea lives in `reference/` (loop spec plus a
-bit-identical vectorized version).
+bit-identical vectorized version). Two write-ups walk through it:
+[Part 1](writeups/idea.md) explains the 5-trits-per-byte lookup idea,
+and [Part 2](writeups/avx512.md) covers why AVX-512 makes it fast.
 
 ## Results
 
@@ -26,22 +28,26 @@ M=256, K=2080, N=2048, random int8 activations, random ternary weights:
 
 | Implementation | min ms | Gop/s | vs naive |
 |----------------|-------:|------:|---------:|
-| python reference lut_mm (pure-Python loops) † | ~99,000 | 0.022 | 0.0003x |
-| python reference basic_mm (int32 matmul) † | 4,104 | 0.53 | 0.006x |
-| python lut_mm_vec (vectorized numpy) † | 637 | 3.43 | 0.040x |
-| naive_mm (C++, AVX2 auto-vectorized by MSVC) | 25.8 | 84.5 | 1.00x |
-| bitnet_tl2 (microsoft/BitNet's AVX2 pshufb) | 13.3 | 163.5 | 1.94x |
-| bitnet_tl2@512b (our 512-bit port of TL2) | 7.5 | 291.0 | 3.44x |
-| naive_mm_vnni (dense int8, AVX-512 VNNI `vpdpbusd`) | 3.9 | 553.7 | 6.60x |
-| **lut_mm_avx512 (this project's kernel)** | **3.1** | **694.6** | **8.22x** |
+| naive_mm (C++, AVX2 auto-vectorized by MSVC) | 25.9 | 84.2 | 1.00x |
+| bitnet_tl2 (microsoft/BitNet's AVX2 pshufb) | 12.6 | 173.4 | 2.06x |
+| bitnet_tl2@512b (our 512-bit port of TL2) | 6.6 | 329.3 | 3.91x |
+| dense_mm_vnni (dense int8, AVX-512 VNNI `vpdpbusd`) | 3.9 | 555.2 | 6.59x |
+| **lut_mm_avx512 (this project's kernel)** | **3.1** | **704.3** | **8.37x** |
 
-At M=256, K=4160, N=4096: lut_mm_avx512 703 Gop/s vs bitnet_tl2@512b 323
-and bitnet_tl2 172. GEMV (M=1, K=2080) runs in 0.02-0.03 ms (330-430
+(Best of 9 reps; a bare `build\bench.exe` reproduces this shape.) So the
+kernel is 4.1x faster than BitNet's AVX2 TL2 kernel and 2.1x faster than
+our 512-bit TL2 port. BitNet's kernels emit float (their native
+dequantized output); the harness converts that to int32 for the
+bit-exact check *outside* the timed region, the same concession it makes
+for the int8→float input — so their timings cover only their kernel.
+
+At M=256, K=4160, N=4096: lut_mm_avx512 710 Gop/s vs bitnet_tl2@512b 343
+and bitnet_tl2 174. GEMV (M=1, K=2080) runs in 0.02-0.03 ms (330-430
 Gop/s; timer-noise limited at that scale). Every implementation,
 including BitNet's, produces bit-identical int32 results vs the dense
 GEMM — the harness refuses to benchmark anything that doesn't.
 
-`naive_mm_vnni` is the strongest dense baseline this hardware offers —
+`dense_mm_vnni` is the strongest dense baseline this hardware offers —
 unpacked int8 weights fed to the dual-pumped `vpdpbusd` dot-product
 instruction. The LUT kernel beats it by 1.27x at the cache-resident
 shape above, and the gap grows with size because dense weights are 5x
@@ -66,9 +72,12 @@ in [results/thread_scaling.csv](results/thread_scaling.csv), plotted in
 | M=256 K=2080 N=2048 | 8 | 0.69 | 3141 | 4.5x |
 | M=256 K=4160 N=4096 | 8 | 1.99 | 4394 | 6.2x |
 
-† measured by `tools/bench_python.py`. The loop-based lut_mm was timed at
-M=1 (380 ms) and scaled; its rate is M-independent. NumPy has no BLAS
-path for integer dtypes, so its matmul is a plain C loop.
+For scale, the NumPy reference implementations (`tools/bench_python.py`,
+same shape) land far below the C kernels: pure-Python loop lut_mm ~0.022
+Gop/s, int32 matmul 0.53, vectorized-NumPy lut_mm 3.43. The loop-based
+lut_mm was timed at M=1 (380 ms) and scaled; its rate is M-independent.
+NumPy has no BLAS path for integer dtypes, so its matmul is a plain C
+loop.
 
 ## The kernel (`src/ternary_mm_avx512.cpp`, AVX-512 F+BW)
 
@@ -138,23 +147,25 @@ the cleanup but live at commit `b84eb3e`.
   `vpgatherdd` into the 243-entry table — ties the plain scalar loop
   (~47 Gop/s both; gather is microcoded on Zen, ~1 lookup/cycle) and
   loses to the auto-vectorized dense GEMM. BitNet's pshufb design beats
-  it 3.5x in the same ISA class. Lookup throughput is everything.
+  it 3.7x in the same ISA class. Lookup throughput is everything.
 - **Width vs design, measured as a 2x2** (Gop/s at K=2080, matched v1
   sweep implementations on both sides):
 
   | | 256-bit | 512-bit | width scaling |
   |---|---:|---:|---:|
-  | TL2 3-trit pshufb | 163 | 292 | 1.79x |
+  | TL2 3-trit pshufb | 173 | 329 | 1.90x |
   | ours 5-trit vpermt2w | 155 | 355 | 2.29x |
 
-  At equal 256-bit width the designs tie — TL2 does more, cheaper
-  lookups; ours does one lookup per 5 weights but pays a 4-permute +
-  3-blend select tree. The 5-trit format scales superlinearly with width
-  because two-register permute capacity doubles along with the lanes,
+  At equal 256-bit width TL2 is ~12% ahead — it does more, cheaper
+  lookups, while ours does one lookup per 5 weights but pays a 4-permute
+  + 3-blend select tree. What flips the result is scaling: the 5-trit
+  format gains superlinearly with width (2.29x vs 1.90x), because the
+  two-register permute's table capacity doubles along with the lanes,
   collapsing the select tree to 2 permutes + 1 blend. At matched 512-bit
-  width ours is ~21% faster while storing weights 4.6% denser; TL2
-  remains the right design for AVX2-only hardware, where no shuffle can
-  index 122 entries.
+  width ours pulls ~8% ahead while storing weights 4.6% denser. TL2
+  remains the better design for AVX2-only hardware, where no shuffle can
+  index 122 entries; the 5-trit format only wins once AVX-512 unlocks the
+  wide table.
 - **Optimization passes** took the kernel from 355 to 695 Gop/s: SIMD
   table build replacing a serial scalar build (~40% of runtime), 4-row
   decode sharing, masked tails, and first-flush-store.
@@ -181,10 +192,11 @@ cmake --build build
 build\bench.exe [-m M] [-k K] [-n N] [-r reps] [-t threads] [--seed S]
 ```
 
-Defaults: M=256, K=2000, N=2048, 5 reps. K must be a multiple of 5.
+Defaults: M=256, K=2080, N=2048, 5 reps. K must be a multiple of 5.
 The AVX-512 kernel is detected and skipped at runtime if the CPU lacks
-AVX-512BW; the VNNI baseline likewise requires AVX-512 VNNI. `-t` adds a multi-threaded AVX-512 implementation to the
-accuracy check and benchmark; the default is `-t 1`.
+AVX-512BW; the VNNI baseline likewise requires AVX-512 VNNI. `-t` adds a
+multi-threaded AVX-512 implementation to the accuracy check and
+benchmark; the default is `-t 1`.
 
 ## License
 
