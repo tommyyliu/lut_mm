@@ -41,8 +41,8 @@ dequantized output); the harness converts that to int32 for the
 bit-exact check *outside* the timed region, the same concession it makes
 for the int8→float input — so their timings cover only their kernel.
 
-At M=256, K=4160, N=4096: lut_mm_avx512 710 Gop/s vs bitnet_tl2@512b 343
-and bitnet_tl2 174. GEMV (M=1, K=2080) runs in 0.02-0.03 ms (330-430
+At M=256, K=4160, N=4096: lut_mm_avx512 718 Gop/s vs bitnet_tl2@512b 352
+and bitnet_tl2 180. GEMV (M=1, K=2080) runs in 0.02-0.03 ms (330-430
 Gop/s; timer-noise limited at that scale). Every implementation,
 including BitNet's, produces bit-identical int32 results vs the dense
 GEMM — the harness refuses to benchmark anything that doesn't.
@@ -50,13 +50,14 @@ GEMM — the harness refuses to benchmark anything that doesn't.
 `dense_mm_vnni` is the strongest dense baseline this hardware offers —
 unpacked int8 weights fed to the dual-pumped `vpdpbusd` dot-product
 instruction. The LUT kernel beats it by 1.27x at the cache-resident
-shape above, and the gap grows with size because dense weights are 5x
-the bytes (M=256, single thread, Gop/s LUT vs VNNI): 714 vs 347 at
-K=4160, 639 vs 123 at K=8320 — where 68 MB of dense weights fall out
-of L3 but 13.6 MB packed still fits — and 482 vs 110 at K=16640, where
-both spill and the ratio settles near the 5x density advantage. The
-compression is not just a footprint feature; it is what keeps the
-kernel compute-bound at LLM-layer sizes.
+shape above, and the gap stays modest while the dense weights still fit
+this CPU's 32 MB L3 (1.5x at K=4160, 17 MB; M=256, single thread, Gop/s
+LUT vs VNNI: 718 vs 485). It blows open once they spill: at K=8320 the
+68 MB of dense weights fall out of L3 while the 13.6 MB packed form
+still fits, and VNNI craters to DRAM speed (690 vs 127, 5.4x); at
+K=16640 both spill and the ratio settles near the 5x density advantage
+(582 vs 123). The compression is not just a footprint feature; it is
+what keeps the kernel compute-bound at LLM-layer sizes.
 
 Both our kernel and BitNet's have row-parallel wrappers (`-t threads`):
 packed weights stay shared, independent chunks of output rows go to
