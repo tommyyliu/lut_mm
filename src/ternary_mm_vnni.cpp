@@ -125,7 +125,7 @@ void pack_weights_vnni(const int8_t* W, int K, int N, int8_t* WV,
     }
 }
 
-void naive_mm_avx512_vnni(const int8_t* __restrict A,
+void dense_mm_avx512_vnni(const int8_t* __restrict A,
                           const int8_t* __restrict WV,
                           const int32_t* __restrict col_sums, int M, int K,
                           int N, int32_t* __restrict C) {

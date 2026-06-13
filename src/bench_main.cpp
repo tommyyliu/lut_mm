@@ -5,6 +5,8 @@
 //
 // Usage: bench [-m M] [-k K] [-n N] [-r reps] [-t threads] [--seed S]
 
+#define _CRT_SECURE_NO_WARNINGS  // fopen for --dump-w/--bitnet blob I/O
+
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
@@ -104,7 +106,7 @@ const char* arg_str(int argc, char** argv, const char* flag) {
 
 int main(int argc, char** argv) {
     const int M = arg_int(argc, argv, "-m", 256);
-    const int K = arg_int(argc, argv, "-k", 2000);
+    const int K = arg_int(argc, argv, "-k", 2080);
     const int N = arg_int(argc, argv, "-n", 2048);
     const int reps = arg_int(argc, argv, "-r", 5);
     const int seed = arg_int(argc, argv, "--seed", 42);
@@ -160,7 +162,7 @@ int main(int argc, char** argv) {
                     vnni_pack_ms, W_vnni.size());
     } else {
         std::printf(
-            "naive_mm_vnni: skipped (CPU lacks AVX-512 VNNI/BW)\n\n");
+            "dense_mm_vnni: skipped (CPU lacks AVX-512 VNNI/BW)\n\n");
     }
 
     // --dump-w: write the raw weight matrix for tools/pack_tl2.py and exit.
@@ -223,8 +225,8 @@ int main(int argc, char** argv) {
          [&](int32_t* out) { naive_mm(A.data(), W.data(), M, K, N, out); }},
     };
     if (has_avx512vnni) {
-        impls.push_back({"naive_mm_vnni", [&](int32_t* out) {
-                             naive_mm_avx512_vnni(
+        impls.push_back({"dense_mm_vnni", [&](int32_t* out) {
+                             dense_mm_avx512_vnni(
                                  A.data(), W_vnni.data(), W_col_sums.data(),
                                  M, K, N, out);
                          }});

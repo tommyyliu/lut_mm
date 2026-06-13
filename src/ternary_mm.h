@@ -31,7 +31,7 @@ void naive_mm(const int8_t* A, const int8_t* W, int M, int K, int N,
 std::size_t vnni_weight_bytes(int K, int N);
 void pack_weights_vnni(const int8_t* W, int K, int N, int8_t* WV,
                        int32_t* col_sums);
-void naive_mm_avx512_vnni(const int8_t* __restrict A,
+void dense_mm_avx512_vnni(const int8_t* __restrict A,
                           const int8_t* __restrict WV,
                           const int32_t* __restrict col_sums, int M, int K,
                           int N, int32_t* __restrict C);
