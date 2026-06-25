@@ -23,18 +23,30 @@ and [Part 2](writeups/avx512.md) covers why AVX-512 makes it fast.
 
 ## Results
 
-Ryzen 9 9950X (Zen 5), MSVC 19.51, single-threaded unless noted.
-M=256, K=2080, N=2048, random int8 activations, random ternary weights:
+Ryzen 9 9950X (Zen 5), single-threaded unless noted.
+M=256, K=2080, N=2048, random int8 activations, random ternary weights.
+The kernel builds and runs on both MSVC and gcc; Gop/s for each below
+(MSVC 19.51 / gcc 16, same machine):
 
-| Implementation | min ms | Gop/s | vs naive |
-|----------------|-------:|------:|---------:|
-| naive_mm (C++, AVX2 auto-vectorized by MSVC) | 25.9 | 84.2 | 1.00x |
-| bitnet_tl2 (microsoft/BitNet's AVX2 pshufb) | 12.6 | 173.4 | 2.06x |
-| bitnet_tl2@512b (our 512-bit port of TL2) | 6.6 | 329.3 | 3.91x |
-| dense_mm_vnni (dense int8, AVX-512 VNNI `vpdpbusd`) | 3.9 | 555.2 | 6.59x |
-| **lut_mm_avx512 (this project's kernel)** | **3.1** | **704.3** | **8.37x** |
+| Implementation | MSVC Gop/s | gcc Gop/s | vs naive |
+|----------------|-----------:|----------:|---------:|
+| naive_mm (C++, AVX2 auto-vectorized) | 84.2 | 101.0 | 1.00x |
+| bitnet_tl2 (microsoft/BitNet's AVX2 pshufb) | 173.4 | — | 2.06x |
+| bitnet_tl2@512b (our 512-bit port of TL2) | 329.3 | — | 3.91x |
+| dense_mm_vnni (dense int8, AVX-512 VNNI `vpdpbusd`) | 555.2 | 555.3 | 6.59x |
+| **lut_mm_avx512 (this project's kernel)** | **704.3** | **698.7** | **8.37x** |
 
-(Best of 9 reps; a bare `build\bench.exe` reproduces this shape.) So the
+The `vs naive` column is the MSVC ratio. The kernel itself is within ~1%
+across compilers (704 vs 699 Gop/s) — it is hand-written intrinsics, so
+codegen barely moves it. `dense_mm_vnni` is identical (a single hardware
+instruction). What does shift is the naive baseline: gcc auto-vectorizes
+it ~20% faster (84→101 Gop/s), so on gcc the "vs naive" ratio is smaller
+(6.92x, not 8.37x) — the baseline improving, not the kernel regressing.
+BitNet rows are MSVC-only here (their kernels need a codegen step); the
+shape-specialized comparison is unaffected by the host compiler.
+
+(Best of 9 reps; on Windows a bare `build\bench.exe` reproduces this
+shape, on Linux the `bench` binary built per the instructions below.) So the
 kernel is 4.1x faster than BitNet's AVX2 TL2 kernel and 2.1x faster than
 our 512-bit TL2 port. BitNet's kernels emit float (their native
 dequantized output); the harness converts that to int32 for the
@@ -185,12 +197,23 @@ the cleanup but live at commit `b84eb3e`.
 
 ## Build and run
 
-From a VS x64 developer prompt (or after `vcvars64.bat`):
+Builds on both MSVC and gcc (the `CMakeLists.txt` picks `/arch:AVX512` or
+`-mavx512*` per compiler). On Windows, from a VS x64 developer prompt (or
+after `vcvars64.bat`):
 
 ```
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 build\bench.exe [-m M] [-k K] [-n N] [-r reps] [-t threads] [--seed S]
+```
+
+On Linux (gcc 16 verified; clang should work the same — needs AVX-512 BW,
+and VNNI for the dense baseline):
+
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+./build/bench [-m M] [-k K] [-n N] [-r reps] [-t threads] [--seed S]
 ```
 
 Defaults: M=256, K=2080, N=2048, 5 reps. K must be a multiple of 5.
