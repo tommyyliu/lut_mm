@@ -234,16 +234,25 @@ void lut_mm_avx512(const int8_t* __restrict A, const int8_t* __restrict P,
     const int acc_stride = (N + 31) & ~31;
     const int max_rows = M < 4 ? M : 4;
     const size_t acc_bytes = (size_t)max_rows * acc_stride * sizeof(int16_t);
+    // Reusable per-thread accumulator scratch. The kernel zeroes acc16 on
+    // entry and leaves it zeroed on return (flush_row writes zeros back), so
+    // the buffer stays valid across calls — we only allocate/zero when it has
+    // to grow. This avoids a heap alloc + full memset on every call, which at
+    // GEMV sizes is thousands of allocations per token.
     struct Aligned64Delete {
         void operator()(int16_t* p) const noexcept {
             ::operator delete[](p, std::align_val_t(64));
         }
     };
-    const std::unique_ptr<int16_t[], Aligned64Delete> acc16_owner(
-        static_cast<int16_t*>(
+    thread_local std::unique_ptr<int16_t[], Aligned64Delete> acc16_owner;
+    thread_local size_t acc16_cap = 0;
+    if (acc_bytes > acc16_cap) {
+        acc16_owner.reset(static_cast<int16_t*>(
             ::operator new[](acc_bytes, std::align_val_t(64))));
+        std::memset(acc16_owner.get(), 0, acc_bytes);
+        acc16_cap = acc_bytes;
+    }
     int16_t* acc16 = acc16_owner.get();
-    std::memset(acc16, 0, acc_bytes);
     int i = 0;
     for (; i + 4 <= M; i += 4) {
         lut_rows_dispatch<4>(A + (size_t)i * K, P, K, N, C + (size_t)i * N,
