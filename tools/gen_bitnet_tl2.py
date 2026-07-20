@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LGPL-3.0-or-later
 """Generate BitNet TL2 kernels for this project's benchmark shapes.
 
 Drives microsoft/BitNet's own utils/codegen_tl2.py (cloned under

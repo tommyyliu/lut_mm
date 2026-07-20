@@ -225,7 +225,8 @@ benchmark; the default is `-t 1`.
 
 ## License
 
-GPL-3.0-or-later (see `LICENSE`). The BitNet-derived components —
+LGPL-3.0-or-later (see `LICENSE.LESSER` for the additional permissions and
+`LICENSE` for the GPLv3 text they build on). The BitNet-derived components —
 `src/generated/bitnet-lut-kernels.h` and the preprocessing functions in
 `tools/pack_tl2.py` — originate from
 [microsoft/BitNet](https://github.com/microsoft/BitNet) under the MIT

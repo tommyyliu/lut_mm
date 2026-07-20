@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-3.0-or-later
 //
 // Experiment harness: verifies every LUT implementation against a naive
 // dense GEMM (exact integer match) and benchmarks all of them.

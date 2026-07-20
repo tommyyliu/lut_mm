@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LGPL-3.0-or-later
 """Render results/thread_scaling.csv as results/thread_scaling.svg.
 
 One panel per shape, throughput vs thread count (log2 x-axis), our kernel

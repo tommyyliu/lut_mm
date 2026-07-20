@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LGPL-3.0-or-later
 """Pack ternary weights (-1, 0, 1) five to a byte.
 
 Five trits are read as a balanced-ternary number, w0*81 + w1*27 + w2*9 +

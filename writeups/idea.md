@@ -156,7 +156,7 @@ group 1 codes: [105  121  -80 -121   89  -15]  →  table 1 gives [ 4  40   4  -
 Sanity check on column 0, the slow way:
 
 $$
-\underbrace{-1+0+3+4-5}_{\text{group 0}} + \underbrace{6+7+0-9+0}_{\text{group 1}} = 1 + 4 = 5 \huge \checkmark
+\underbrace{-1+0+3+4-5}_{\text{group 0}} + \underbrace{6+7+0-9+0}_{\text{group 1}} = 1 + 4 = 5  \huge \checkmark
 $$
 
 The weights were never unpacked: each byte went straight from memory into a table index.

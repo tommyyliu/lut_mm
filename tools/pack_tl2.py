@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later AND MIT
+# SPDX-License-Identifier: LGPL-3.0-or-later AND MIT
 """Pack a ternary weight matrix into BitNet's TL2 on-disk format.
 
 The two preprocess_* functions are copied verbatim (MIT license) from

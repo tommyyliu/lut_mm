@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-3.0-or-later
 // Derived from microsoft/BitNet's generated TL2 kernels (MIT License,
 // Copyright (c) Microsoft Corporation); the widening is this project's.
 //
